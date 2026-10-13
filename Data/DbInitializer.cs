@@ -12,7 +12,7 @@ namespace AI_Powered_CRM.Data
 {
     public static class DbInitializer
     {
-        public static async Task SeedAsync(IServiceProvider serviceProvider)
+        public static async Task SeedAsync(IServiceProvider serviceProvider, bool isDevelopment = false)
         {
             using var scope = serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -30,6 +30,8 @@ namespace AI_Powered_CRM.Data
             }
 
             // 2. Ensure Default Users Exist
+            // Admin is always seeded (first-run bootstrap).
+            // Demo accounts (manager, sales) are ONLY seeded in Development.
             var adminUser = await EnsureUserAsync(
                 userManager,
                 "admin@crm.local",
@@ -38,24 +40,30 @@ namespace AI_Powered_CRM.Data
                 "Admin"
             );
 
-            var managerUser = await EnsureUserAsync(
-                userManager,
-                "manager@crm.local",
-                "Sarah Connor (Manager)",
-                "Manager@123",
-                "Manager"
-            );
+            ApplicationUser? managerUser = null;
+            ApplicationUser? salesUser   = null;
 
-            var salesUser = await EnsureUserAsync(
-                userManager,
-                "sales@crm.local",
-                "Alex Rivera (Sales Exec)",
-                "Sales@123",
-                "SalesExecutive"
-            );
+            if (isDevelopment)
+            {
+                managerUser = await EnsureUserAsync(
+                    userManager,
+                    "manager@crm.local",
+                    "Sarah Connor (Manager)",
+                    "Manager@123",
+                    "Manager"
+                );
 
-            // 3. Seed Realistic Sample Leads if none exist
-            if (!await context.Leads.AnyAsync())
+                salesUser = await EnsureUserAsync(
+                    userManager,
+                    "sales@crm.local",
+                    "Alex Rivera (Sales Exec)",
+                    "Sales@123",
+                    "SalesExecutive"
+                );
+            }
+
+            // 3. Seed Realistic Sample Leads if none exist (Development only)
+            if (isDevelopment && salesUser != null && managerUser != null && !await context.Leads.AnyAsync())
             {
                 var sampleLeads = new List<Lead>
                 {

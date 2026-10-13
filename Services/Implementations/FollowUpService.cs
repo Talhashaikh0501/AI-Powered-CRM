@@ -14,124 +14,172 @@ namespace AI_Powered_CRM.Services.Implementations
 {
     public class FollowUpService : IFollowUpService
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IAuditService _auditService;
-        private readonly INotificationService _notificationService;
-        private readonly ILogger<FollowUpService> _logger;
+        private readonly ApplicationDbContext      _context;
+        private readonly IAuditService             _auditService;
+        private readonly INotificationService      _notificationService;
+        private readonly ILogger<FollowUpService>  _logger;
 
         public FollowUpService(
-            ApplicationDbContext context,
-            IAuditService auditService,
-            INotificationService notificationService,
+            ApplicationDbContext     context,
+            IAuditService            auditService,
+            INotificationService     notificationService,
             ILogger<FollowUpService> logger)
         {
-            _context = context;
-            _auditService = auditService;
+            _context             = context;
+            _auditService        = auditService;
             _notificationService = notificationService;
-            _logger = logger;
+            _logger              = logger;
         }
 
-        public async Task<List<FollowUp>> GetFollowUpsAsync(string? currentUserId, string? role, FollowUpStatus? status = null)
+        // ------------------------------------------------------------------
+        // READ: list follow-ups (scoped by role)
+        // ------------------------------------------------------------------
+        public async Task<List<FollowUp>> GetFollowUpsAsync(
+            string?          currentUserId,
+            string?          role,
+            FollowUpStatus?  status = null)
         {
             var query = _context.FollowUps
                 .Include(f => f.Lead)
                 .Include(f => f.AssignedUser)
                 .Where(f => !f.Lead.IsArchived);
 
+            // SalesExecutive sees only their own follow-ups
             if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
-            {
                 query = query.Where(f => f.AssignedUserId == currentUserId);
-            }
 
             if (status.HasValue)
-            {
                 query = query.Where(f => f.Status == status.Value);
-            }
 
             return await query.OrderBy(f => f.DueAt).ToListAsync();
         }
 
-        public async Task<List<FollowUp>> GetOverdueFollowUpsAsync(string? currentUserId, string? role)
+        public async Task<List<FollowUp>> GetOverdueFollowUpsAsync(
+            string? currentUserId,
+            string? role)
         {
             var query = _context.FollowUps
                 .Include(f => f.Lead)
                 .Include(f => f.AssignedUser)
-                .Where(f => !f.Lead.IsArchived && f.Status == FollowUpStatus.Pending && f.DueAt < DateTime.UtcNow);
+                .Where(f => !f.Lead.IsArchived
+                         && f.Status == FollowUpStatus.Pending
+                         && f.DueAt < DateTime.UtcNow);
 
             if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
-            {
                 query = query.Where(f => f.AssignedUserId == currentUserId);
-            }
 
             return await query.OrderBy(f => f.DueAt).ToListAsync();
         }
 
-        public async Task<List<FollowUp>> GetTodayFollowUpsAsync(string? currentUserId, string? role)
+        public async Task<List<FollowUp>> GetTodayFollowUpsAsync(
+            string? currentUserId,
+            string? role)
         {
             var startOfDay = DateTime.UtcNow.Date;
-            var endOfDay = startOfDay.AddDays(1).AddTicks(-1);
+            var endOfDay   = startOfDay.AddDays(1).AddTicks(-1);
 
             var query = _context.FollowUps
                 .Include(f => f.Lead)
                 .Include(f => f.AssignedUser)
-                .Where(f => !f.Lead.IsArchived &&
-                            f.Status == FollowUpStatus.Pending &&
-                            f.DueAt >= startOfDay &&
-                            f.DueAt <= endOfDay);
+                .Where(f => !f.Lead.IsArchived
+                         && f.Status == FollowUpStatus.Pending
+                         && f.DueAt >= startOfDay
+                         && f.DueAt <= endOfDay);
 
             if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
-            {
                 query = query.Where(f => f.AssignedUserId == currentUserId);
-            }
 
             return await query.OrderBy(f => f.DueAt).ToListAsync();
         }
 
-        public async Task<FollowUp> ScheduleFollowUpAsync(ScheduleFollowUpDto dto, string currentUserId)
+        // ------------------------------------------------------------------
+        // WRITE: schedule
+        // Only Admin/Manager may assign a follow-up to a different user.
+        // SalesExecutive can schedule on their own lead only.
+        // ------------------------------------------------------------------
+        public async Task<FollowUp> ScheduleFollowUpAsync(
+            ScheduleFollowUpDto dto,
+            string currentUserId,
+            string currentUserRole)
         {
-            var lead = await _context.Leads.FirstOrDefaultAsync(l => l.LeadId == dto.LeadId && !l.IsArchived);
-            if (lead == null) throw new InvalidOperationException("Lead not found or archived.");
+            var lead = await _context.Leads
+                .FirstOrDefaultAsync(l => l.LeadId == dto.LeadId && !l.IsArchived);
 
-            var assignedTo = !string.IsNullOrEmpty(dto.AssignedUserId) ? dto.AssignedUserId : lead.OwnerUserId ?? currentUserId;
+            if (lead == null)
+                throw new InvalidOperationException("Lead not found or archived.");
+
+            // Ownership check for SalesExecutive
+            if (currentUserRole == "SalesExecutive" && lead.OwnerUserId != currentUserId)
+            {
+                _logger.LogWarning(
+                    "User {UserId} (SalesExecutive) tried to schedule follow-up on Lead {LeadId} they do not own.",
+                    currentUserId, dto.LeadId);
+                throw new UnauthorizedAccessException("You can only schedule follow-ups on leads you own.");
+            }
+
+            // Only Admin/Manager may reassign follow-up to another user
+            string assignedTo;
+            if (!string.IsNullOrEmpty(dto.AssignedUserId)
+                && dto.AssignedUserId != currentUserId
+                && currentUserRole == "SalesExecutive")
+            {
+                // SalesExecutive cannot assign to someone else – default to self
+                assignedTo = currentUserId;
+            }
+            else
+            {
+                assignedTo = !string.IsNullOrEmpty(dto.AssignedUserId)
+                    ? dto.AssignedUserId
+                    : lead.OwnerUserId ?? currentUserId;
+            }
 
             var followUp = new FollowUp
             {
-                LeadId = dto.LeadId,
+                LeadId         = dto.LeadId,
                 AssignedUserId = assignedTo,
-                DueAt = dto.DueAt,
-                Type = dto.Type,
-                Notes = dto.Notes,
-                Status = FollowUpStatus.Pending
+                DueAt          = dto.DueAt,
+                Type           = dto.Type,
+                Notes          = dto.Notes,
+                Status         = FollowUpStatus.Pending
             };
 
             _context.FollowUps.Add(followUp);
 
             _context.LeadActivities.Add(new LeadActivity
             {
-                LeadId = dto.LeadId,
-                UserId = currentUserId,
-                Type = ActivityType.Note,
+                LeadId      = dto.LeadId,
+                UserId      = currentUserId,
+                Type        = ActivityType.Note,
                 Description = $"Follow-up {dto.Type} scheduled for {dto.DueAt:yyyy-MM-dd HH:mm UTC}. Notes: {dto.Notes ?? "None"}",
-                OccurredAt = DateTime.UtcNow
+                OccurredAt  = DateTime.UtcNow
             });
 
             lead.UpdatedAt = DateTime.UtcNow;
-
             await _context.SaveChangesAsync();
 
             await _notificationService.CreateNotificationAsync(
                 assignedTo,
                 "Follow-Up Scheduled",
                 $"You have a follow-up scheduled for lead '{lead.Name}' on {dto.DueAt:MMM dd, yyyy HH:mm}.",
-                lead.LeadId
-            );
+                lead.LeadId);
 
-            await _auditService.LogAsync(currentUserId, "FollowUp", followUp.FollowUpId.ToString(), "Scheduled", dto);
+            await _auditService.LogAsync(
+                currentUserId, "FollowUp",
+                followUp.FollowUpId.ToString(), "Scheduled",
+                new { dto.LeadId, dto.Type, dto.DueAt, AssignedTo = assignedTo });
 
             return followUp;
         }
 
-        public async Task<bool> CompleteFollowUpAsync(int followUpId, string outcomeNotes, string currentUserId)
+        // ------------------------------------------------------------------
+        // WRITE: complete
+        // SalesExecutive may only complete follow-ups assigned to them.
+        // ------------------------------------------------------------------
+        public async Task<bool> CompleteFollowUpAsync(
+            int    followUpId,
+            string outcomeNotes,
+            string currentUserId,
+            string currentUserRole)
         {
             var followUp = await _context.FollowUps
                 .Include(f => f.Lead)
@@ -139,33 +187,54 @@ namespace AI_Powered_CRM.Services.Implementations
 
             if (followUp == null) return false;
 
-            followUp.Status = FollowUpStatus.Completed;
+            // Ownership check
+            if (currentUserRole == "SalesExecutive" && followUp.AssignedUserId != currentUserId)
+            {
+                _logger.LogWarning(
+                    "User {UserId} tried to complete FollowUp {FollowUpId} not assigned to them.",
+                    currentUserId, followUpId);
+                return false;
+            }
+
+            followUp.Status      = FollowUpStatus.Completed;
             followUp.CompletedAt = DateTime.UtcNow;
 
             _context.LeadActivities.Add(new LeadActivity
             {
-                LeadId = followUp.LeadId,
-                UserId = currentUserId,
+                LeadId      = followUp.LeadId,
+                UserId      = currentUserId,
                 Type = followUp.Type switch
                 {
-                    FollowUpType.Call => ActivityType.Call,
+                    FollowUpType.Call    => ActivityType.Call,
                     FollowUpType.Meeting => ActivityType.Meeting,
-                    FollowUpType.Email => ActivityType.Email,
-                    _ => ActivityType.Note
+                    FollowUpType.Email   => ActivityType.Email,
+                    _                    => ActivityType.Note
                 },
                 Description = $"Follow-up completed: {outcomeNotes}",
-                OccurredAt = DateTime.UtcNow
+                OccurredAt  = DateTime.UtcNow
             });
 
             followUp.Lead.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-            await _auditService.LogAsync(currentUserId, "FollowUp", followUpId.ToString(), "Completed", new { outcomeNotes });
+            await _auditService.LogAsync(
+                currentUserId, "FollowUp",
+                followUpId.ToString(), "Completed",
+                new { outcomeNotes });
 
             return true;
         }
 
-        public async Task<bool> RescheduleFollowUpAsync(int followUpId, DateTime newDueAt, string? reason, string currentUserId)
+        // ------------------------------------------------------------------
+        // WRITE: reschedule
+        // SalesExecutive may only reschedule follow-ups assigned to them.
+        // ------------------------------------------------------------------
+        public async Task<bool> RescheduleFollowUpAsync(
+            int      followUpId,
+            DateTime newDueAt,
+            string?  reason,
+            string   currentUserId,
+            string   currentUserRole)
         {
             var followUp = await _context.FollowUps
                 .Include(f => f.Lead)
@@ -173,23 +242,35 @@ namespace AI_Powered_CRM.Services.Implementations
 
             if (followUp == null) return false;
 
-            var oldDate = followUp.DueAt;
-            followUp.DueAt = newDueAt;
-            followUp.Status = FollowUpStatus.Pending;
+            // Ownership check
+            if (currentUserRole == "SalesExecutive" && followUp.AssignedUserId != currentUserId)
+            {
+                _logger.LogWarning(
+                    "User {UserId} tried to reschedule FollowUp {FollowUpId} not assigned to them.",
+                    currentUserId, followUpId);
+                return false;
+            }
+
+            var oldDate      = followUp.DueAt;
+            followUp.DueAt   = newDueAt;
+            followUp.Status  = FollowUpStatus.Pending;
 
             _context.LeadActivities.Add(new LeadActivity
             {
-                LeadId = followUp.LeadId,
-                UserId = currentUserId,
-                Type = ActivityType.Note,
+                LeadId      = followUp.LeadId,
+                UserId      = currentUserId,
+                Type        = ActivityType.Note,
                 Description = $"Follow-up rescheduled from {oldDate:yyyy-MM-dd} to {newDueAt:yyyy-MM-dd HH:mm UTC}. Reason: {reason ?? "Not specified"}",
-                OccurredAt = DateTime.UtcNow
+                OccurredAt  = DateTime.UtcNow
             });
 
             followUp.Lead.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-            await _auditService.LogAsync(currentUserId, "FollowUp", followUpId.ToString(), "Rescheduled", new { oldDate, newDueAt, reason });
+            await _auditService.LogAsync(
+                currentUserId, "FollowUp",
+                followUpId.ToString(), "Rescheduled",
+                new { oldDate, newDueAt, reason });
 
             return true;
         }
