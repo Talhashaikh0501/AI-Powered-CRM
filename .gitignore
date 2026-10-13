@@ -1,0 +1,12 @@
+.vs/
+.vscode/
+**/bin/
+**/obj/
+*.user
+*.suo
+TestResults/
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+**/secrets.json
