@@ -1,0 +1,121 @@
+@model AI_Powered_CRM.ViewModels.ReportsViewModel
+@{
+    ViewData["Title"] = "Conversion & Performance Reports";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Executive Analytics & Conversion Reports</h3>
+        <p class="text-muted small mb-0">
+            Deep insights into pipeline velocity, acquisition channel ROI, and sales rep performance.
+        </p>
+    </div>
+</div>
+
+<!-- Conversion Metric Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Win Rate Ratio</div>
+            <div class="fs-3 fw-bold text-dark">@Model.ConversionReport.ConversionRate%</div>
+            <div class="small text-muted">@Model.ConversionReport.ConvertedLeads won out of @(Model.ConversionReport.ConvertedLeads + Model.ConversionReport.LostLeads) closed</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Won Revenue</div>
+            <div class="fs-3 fw-bold text-success">$@Model.ConversionReport.TotalWonRevenue.ToString("N0")</div>
+            <div class="small text-muted">Closed deal value</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Average Deal Size</div>
+            <div class="fs-3 fw-bold text-primary">$@Model.ConversionReport.AverageDealSize.ToString("N0")</div>
+            <div class="small text-muted">Per converted customer</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Leads Tracked</div>
+            <div class="fs-3 fw-bold text-dark">@Model.ConversionReport.TotalLeads</div>
+            <div class="small text-muted">Across all channels</div>
+        </div>
+    </div>
+</div>
+
+<!-- Acquisition Channels ROI Table -->
+<div class="crm-card p-4 mb-4">
+    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-funnel-fill text-primary me-2"></i>Acquisition Channel Performance & ROI</h6>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                <tr>
+                    <th>Lead Source Channel</th>
+                    <th>Total Leads</th>
+                    <th>Deals Converted</th>
+                    <th>Conversion Rate</th>
+                    <th class="text-end">Revenue Realized</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.SourcePerformance)
+                {
+                    <tr>
+                        <td class="fw-bold text-dark">@s.Source</td>
+                        <td>@s.LeadCount</td>
+                        <td><span class="badge bg-success bg-opacity-10 text-success">@s.ConvertedCount Won</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="width: 80px; height: 6px;">
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: @s.ConversionRate%"></div>
+                                </div>
+                                <span class="small fw-semibold">@s.ConversionRate%</span>
+                            </div>
+                        </td>
+                        <td class="text-end fw-bold text-success">$@s.TotalRevenue.ToString("N0")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Sales Representative Leaderboard -->
+<div class="crm-card p-4">
+    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-award-fill text-warning me-2"></i>Sales Representative Leaderboard</h6>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                <tr>
+                    <th>Sales Representative</th>
+                    <th>Assigned Leads</th>
+                    <th>Completed Follow-Ups</th>
+                    <th>Deals Won</th>
+                    <th>Win Rate %</th>
+                    <th class="text-end">Closed Revenue</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rep in Model.StaffPerformance)
+                {
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="rounded-circle bg-dark text-white p-2 d-flex align-items-center justify-content-center fw-bold" style="width: 32px; height: 32px; font-size: 0.8rem;">
+                                    @rep.StaffName.Substring(0, 1)
+                                </div>
+                                <span class="fw-bold text-dark">@rep.StaffName</span>
+                            </div>
+                        </td>
+                        <td>@rep.AssignedLeadsCount</td>
+                        <td><span class="badge bg-light text-dark border">@rep.CompletedFollowUpsCount Completed</span></td>
+                        <td><span class="badge bg-success">@rep.ConvertedLeadsCount Won</span></td>
+                        <td><span class="fw-semibold text-dark">@rep.ConversionRate%</span></td>
+                        <td class="text-end fw-bold text-success fs-6">$@rep.ClosedRevenue.ToString("N0")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

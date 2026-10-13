@@ -1,0 +1,107 @@
+@model AI_Powered_CRM.ViewModels.LeadCreateEditViewModel
+@{
+    ViewData["Title"] = "Edit Lead - " + Model.Name;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h4 class="fw-bold text-dark mb-0">Edit Lead: @Model.Name</h4>
+                <small class="text-muted">Update contact details, budget, and ownership parameters</small>
+            </div>
+            <a asp-action="Details" asp-route-id="@Model.LeadId" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Back to Workspace
+            </a>
+        </div>
+
+        <div class="crm-card p-4">
+            <form asp-action="Edit" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="LeadId" />
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Prospect Full Name <span class="text-danger">*</span></label>
+                        <input asp-for="Name" class="form-control" required />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Company</label>
+                        <input asp-for="Company" class="form-control" />
+                        <span asp-validation-for="Company" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Phone Number <span class="text-danger">*</span></label>
+                        <input asp-for="Phone" class="form-control" required />
+                        <span asp-validation-for="Phone" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Email Address</label>
+                        <input asp-for="Email" type="email" class="form-control" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Interested Product / Service <span class="text-danger">*</span></label>
+                        <input asp-for="InterestedProduct" class="form-control" required />
+                        <span asp-validation-for="InterestedProduct" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-secondary">Estimated Budget ($)</label>
+                        <input asp-for="Budget" type="number" step="1000" class="form-control" />
+                        <span asp-validation-for="Budget" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-secondary">Lead Source</label>
+                        <select asp-for="Source" class="form-select">
+                            <option value="Website">Website Form</option>
+                            <option value="Instagram">Instagram Ad</option>
+                            <option value="LinkedIn">LinkedIn Outreach</option>
+                            <option value="Referral">Client Referral</option>
+                            <option value="ColdCall">Cold Call</option>
+                            <option value="EmailCampaign">Email Campaign</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-secondary">Pipeline Stage</label>
+                        <select asp-for="Status" class="form-select" asp-items="Html.GetEnumSelectList<LeadStatus>()"></select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-secondary">Priority</label>
+                        <select asp-for="Priority" class="form-select" asp-items="Html.GetEnumSelectList<LeadPriority>()"></select>
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label small fw-semibold text-secondary">Assigned Owner</label>
+                        <select asp-for="OwnerUserId" class="form-select">
+                            @foreach (var user in Model.AvailableUsers)
+                            {
+                                <option value="@user.Id">@(user.FullName ?? user.UserName)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="border-top mt-4 pt-3 d-flex justify-content-end gap-2">
+                    <a asp-action="Details" asp-route-id="@Model.LeadId" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4 fw-semibold shadow-sm">
+                        <i class="bi bi-save me-1"></i> Update Lead
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

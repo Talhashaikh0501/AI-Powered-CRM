@@ -1,0 +1,582 @@
+@model AI_Powered_CRM.ViewModels.LeadDetailsViewModel
+@{
+    ViewData["Title"] = Model.Lead.Name + " - Lead Intelligence Workspace";
+    var latestAi = Model.LatestInsight;
+    var aiScore = latestAi?.Score ?? 50;
+    var aiClass = latestAi?.Classification.ToString() ?? "Warm";
+    var risk = latestAi?.RiskLevel.ToString() ?? "Low";
+    var urgency = latestAi?.Urgency.ToString() ?? "Normal";
+}
+
+<!-- Top Header & Breadcrumbs -->
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <a asp-action="Index" class="text-decoration-none text-muted small"><i class="bi bi-arrow-left"></i> Leads Workspace</a>
+            <span class="text-muted small">&bull;</span>
+            <span class="badge bg-secondary bg-opacity-10 text-secondary border small">ID #@Model.Lead.LeadId</span>
+            <span class="badge bg-light text-dark border small">Source: @Model.Lead.Source</span>
+        </div>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <h2 class="fw-bold text-dark mb-0">@Model.Lead.Name</h2>
+            <span class="text-muted fs-5">| @(Model.Lead.Company ?? "Individual Prospect")</span>
+        </div>
+    </div>
+
+    <!-- Quick Action Controls -->
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Edit" asp-route-id="@Model.Lead.LeadId" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 shadow-sm">
+            <i class="bi bi-pencil"></i> Edit Details
+        </a>
+
+        @if (Model.CurrentUserRole == "Admin" || Model.CurrentUserRole == "Manager")
+        {
+            <!-- Reassign Owner Modal Trigger -->
+            <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#reassignModal">
+                <i class="bi bi-person-gear"></i> Reassign
+            </button>
+
+            <!-- Archive Lead -->
+            <form asp-action="Archive" asp-route-id="@Model.Lead.LeadId" method="post" class="d-inline" onsubmit="return confirm('Archive this lead? It will be removed from active views.');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-danger btn-sm shadow-sm" title="Archive Lead">
+                    <i class="bi bi-archive"></i>
+                </button>
+            </form>
+        }
+    </div>
+</div>
+
+<!-- Flagship AI Intelligence Strip -->
+<div class="crm-card p-3 p-md-4 mb-4 shadow-sm" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);">
+    <div class="row g-3 align-items-center">
+        <!-- AI Classification -->
+        <div class="col-6 col-md-3 border-end-md">
+            <div class="text-muted text-uppercase text-xs fw-semibold mb-1" style="font-size: 0.72rem;">AI Classification</div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge @(aiClass == "Hot" ? "badge-hot" : (aiClass == "Warm" ? "badge-warm" : "badge-cold")) fs-6 px-3 py-1" id="badgeAiClass">
+                    <i class="bi @(aiClass == "Hot" ? "bi-fire" : (aiClass == "Warm" ? "bi-lightning-charge" : "bi-snow")) me-1"></i>
+                    <span id="textAiClass">@aiClass Lead</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- AI Score Meter -->
+        <div class="col-6 col-md-3 border-end-md">
+            <div class="text-muted text-uppercase text-xs fw-semibold mb-1" style="font-size: 0.72rem;">Predictive Score</div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="fs-3 fw-bold @(aiScore >= 75 ? "text-danger" : (aiScore >= 40 ? "text-warning" : "text-primary"))" id="textAiScore">
+                    @aiScore<span class="text-muted fs-6 fw-normal">/100</span>
+                </div>
+                <div class="progress flex-grow-1" style="height: 8px;">
+                    <div class="progress-bar @(aiScore >= 75 ? "bg-danger" : (aiScore >= 40 ? "bg-warning" : "bg-primary"))" 
+                         id="barAiScore" role="progressbar" style="width: @aiScore%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Level -->
+        <div class="col-6 col-md-3 border-end-md">
+            <div class="text-muted text-uppercase text-xs fw-semibold mb-1" style="font-size: 0.72rem;">Conversion Risk</div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge @(risk == "High" ? "bg-danger" : (risk == "Medium" ? "bg-warning text-dark" : "bg-success")) px-2 py-1" id="badgeRisk">
+                    <i class="bi bi-shield-exclamation me-1"></i> <span id="textRisk">@risk Risk</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Urgency Level -->
+        <div class="col-6 col-md-3">
+            <div class="text-muted text-uppercase text-xs fw-semibold mb-1" style="font-size: 0.72rem;">Attention Urgency</div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge @(urgency == "Urgent" ? "bg-danger" : (urgency == "High" ? "bg-warning text-dark" : "bg-info text-dark")) px-2 py-1" id="badgeUrgency">
+                    <i class="bi bi-clock-history me-1"></i> <span id="textUrgency">@urgency</span>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Workspace Body (2-Column Layout) -->
+<div class="row g-4">
+    <!-- LEFT COLUMN: AI Intelligence & Commercial Context -->
+    <div class="col-lg-7">
+        <!-- Lead Commercial Overview Card -->
+        <div class="crm-card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold text-dark mb-0"><i class="bi bi-info-circle text-primary me-2"></i>Commercial Profile</h6>
+                <!-- Stage Dropdown / Changer -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted">Pipeline Stage:</span>
+                    <select class="form-select form-select-sm fw-semibold" style="width: 160px;" id="pipelineStageSelect" onchange="updateStage(this.value)">
+                        @foreach (var stage in Enum.GetValues<LeadStatus>())
+                        {
+                            <option value="@stage" selected="@(Model.Lead.Status == stage ? "selected" : null)">@stage</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-sm-6">
+                    <div class="text-muted text-xs" style="font-size: 0.75rem;">Interested Product / Scope</div>
+                    <div class="fw-semibold text-dark">@Model.Lead.InterestedProduct</div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="text-muted text-xs" style="font-size: 0.75rem;">Budget Allocation</div>
+                    <div class="fw-bold text-success fs-6">
+                        @(Model.Lead.Budget.HasValue ? "$" + Model.Lead.Budget.Value.ToString("N0") : "Not Specified")
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="text-muted text-xs" style="font-size: 0.75rem;">Phone Number</div>
+                    <div class="fw-semibold">
+                        <a href="tel:@Model.Lead.Phone" class="text-decoration-none text-dark"><i class="bi bi-telephone text-primary me-1"></i>@Model.Lead.Phone</a>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="text-muted text-xs" style="font-size: 0.75rem;">Email Address</div>
+                    <div class="fw-semibold">
+                        @if (!string.IsNullOrEmpty(Model.Lead.Email))
+                        {
+                            <a href="mailto:@Model.Lead.Email" class="text-decoration-none text-dark"><i class="bi bi-envelope text-primary me-1"></i>@Model.Lead.Email</a>
+                        }
+                        else
+                        {
+                            <span class="text-muted">No email on file</span>
+                        }
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="text-muted text-xs" style="font-size: 0.75rem;">Assigned Account Executive</div>
+                    <div class="fw-semibold text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-person-badge text-secondary"></i>
+                        @(Model.Lead.OwnerUser?.FullName ?? Model.Lead.OwnerUser?.UserName ?? "Unassigned")
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="text-muted text-xs" style="font-size: 0.75rem;">Created / Last Updated</div>
+                    <div class="small text-muted">@Model.Lead.CreatedAt.ToString("MMM dd, yyyy") &bull; Updated @Model.Lead.UpdatedAt.ToString("g")</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Executive Summary Card -->
+        <div class="crm-card p-4 mb-4 border-primary border-opacity-25" style="background-color: #fafcff;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded bg-primary text-white p-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;">
+                        <i class="bi bi-stars"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-0">AI Lead Synthesis & Summary</h6>
+                </div>
+                <!-- Re-analyze button with AJAX -->
+                <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm" id="btnRunAi" onclick="refreshAiAnalysis()">
+                    <i class="bi bi-arrow-repeat" id="iconAiSpinner"></i>
+                    <span>Regenerate AI Analysis</span>
+                </button>
+            </div>
+
+            <p class="text-dark small lh-base mb-3" id="textAiSummary">
+                @(latestAi?.Summary ?? "No AI analysis performed yet. Click 'Regenerate AI Analysis' to evaluate this prospect.")
+            </p>
+
+            <div class="d-flex justify-content-between align-items-center text-xs text-muted border-top pt-2" style="font-size: 0.75rem;">
+                <span id="textAiModel">
+                    Model: @(latestAi?.Model ?? "Deterministic-v1") (@(latestAi?.Provider ?? "RulesEngine"))
+                </span>
+                <span id="textAiGeneratedAt">
+                    Evaluated: @(latestAi?.GeneratedAt.ToString("g") ?? "N/A")
+                </span>
+            </div>
+        </div>
+
+        <!-- "Why This Score" (Explainability Breakdown) -->
+        <div class="crm-card p-4 mb-4">
+            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-lightbulb text-warning me-2"></i>Explainable AI Scoring Factors</h6>
+            <div id="factorsContainer">
+                @if (Model.ParsedReasons.Any())
+                {
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2" id="reasonsList">
+                        @foreach (var reason in Model.ParsedReasons)
+                        {
+                            var isNegative = reason.Contains("Warning", StringComparison.OrdinalIgnoreCase) || 
+                                             reason.Contains("Urgent", StringComparison.OrdinalIgnoreCase) || 
+                                             reason.Contains("Inactive", StringComparison.OrdinalIgnoreCase) ||
+                                             reason.Contains("Zero", StringComparison.OrdinalIgnoreCase);
+
+                            <li class="small d-flex align-items-start gap-2">
+                                <i class="bi @(isNegative ? "bi-exclamation-triangle-fill text-danger" : "bi-check-circle-fill text-success") mt-1"></i>
+                                <span class="@(isNegative ? "text-danger fw-semibold" : "text-dark")">@reason</span>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <div class="text-muted small">No explanation factors stored for this lead yet.</div>
+                }
+            </div>
+        </div>
+
+        <!-- Next Best Action Card -->
+        <div class="crm-card p-4 mb-4" style="background-color: #f0fdf4; border: 1px solid #bbf7d0;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="bi bi-compass text-success fs-5"></i>
+                <h6 class="fw-bold text-success mb-0">Recommended Next Best Action</h6>
+            </div>
+            <p class="small text-dark mb-0 fw-semibold" id="textNextBestAction">
+                @(latestAi?.NextBestAction ?? "Conduct an introductory phone call to discover key timeline requirements.")
+            </p>
+        </div>
+
+        <!-- AI Suggested Response Draft -->
+        <div class="crm-card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-chat-left-dots text-primary"></i>
+                    <h6 class="fw-bold text-dark mb-0">AI Follow-Up Message Draft</h6>
+                </div>
+                <button type="button" class="btn btn-sm btn-link text-decoration-none" onclick="copyResponseDraft()">
+                    <i class="bi bi-clipboard me-1"></i> Copy to Clipboard
+                </button>
+            </div>
+            <textarea class="form-control text-dark small mb-2" rows="4" id="draftResponseText" style="resize: vertical;">@(latestAi?.SuggestedResponse ?? $"Hi {Model.Lead.Name}, following up regarding your interest in {Model.Lead.InterestedProduct}. When would be a great time for a brief call?")</textarea>
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted" style="font-size: 0.72rem;">Human-in-the-loop: Always review and personalize before sending.</small>
+                <button type="button" class="btn btn-xs btn-outline-secondary btn-sm" onclick="regenerateCustomDraft()">
+                    <i class="bi bi-arrow-repeat"></i> Regenerate Draft
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Activity Timeline & Follow-Ups -->
+    <div class="col-lg-5">
+        <!-- Upcoming & Overdue Follow-ups -->
+        <div class="crm-card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold text-dark mb-0"><i class="bi bi-calendar-event text-primary me-2"></i>Follow-Up Schedule</h6>
+                <button type="button" class="btn btn-sm btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#scheduleFollowUpModal">
+                    <i class="bi bi-plus-lg me-1"></i> Schedule
+                </button>
+            </div>
+
+            @if (!Model.Lead.FollowUps.Any(f => f.Status == FollowUpStatus.Pending))
+            {
+                <div class="p-3 bg-light rounded-3 text-center text-muted small">
+                    <i class="bi bi-calendar-check text-success fs-4 d-block mb-1"></i>
+                    No pending follow-ups. Schedule one to keep the deal progressing!
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-2">
+                    @foreach (var fu in Model.Lead.FollowUps.Where(f => f.Status == FollowUpStatus.Pending))
+                    {
+                        var isOverdue = fu.DueAt < DateTime.UtcNow;
+                        <div class="p-3 rounded-3 border @(isOverdue ? "border-danger bg-danger bg-opacity-10" : "bg-light")">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <span class="badge @(isOverdue ? "bg-danger" : "bg-primary")">
+                                    @(isOverdue ? "Overdue" : "Pending") - @fu.Type
+                                </span>
+                                <small class="fw-bold @(isOverdue ? "text-danger" : "text-muted")">
+                                    @fu.DueAt.ToString("MMM dd, HH:mm UTC")
+                                </small>
+                            </div>
+                            <p class="small text-dark mb-2">@(fu.Notes ?? "No notes provided")</p>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2" style="font-size: 0.75rem;" 
+                                        onclick="openCompleteModal(@fu.FollowUpId)">
+                                    <i class="bi bi-check-lg"></i> Complete
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Quick Log Activity Form -->
+        <div class="crm-card p-4 mb-4">
+            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-pencil-square text-primary me-2"></i>Log Customer Interaction</h6>
+            <form asp-action="AddActivity" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="leadId" value="@Model.Lead.LeadId" />
+
+                <div class="mb-2">
+                    <label class="form-label text-xs fw-semibold text-secondary" style="font-size: 0.75rem;">Interaction Type</label>
+                    <select name="type" class="form-select form-select-sm">
+                        <option value="Call">Phone Call</option>
+                        <option value="Meeting">Meeting / Demo</option>
+                        <option value="Email">Email Communication</option>
+                        <option value="Note">Internal Note</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label text-xs fw-semibold text-secondary" style="font-size: 0.75rem;">Notes & Outcomes</label>
+                    <textarea name="description" class="form-control form-control-sm" rows="3" placeholder="Summarize key talking points, agreed action items, or feedback..." required></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-sm btn-dark w-100 fw-semibold">
+                    <i class="bi bi-plus-circle me-1"></i> Add to Timeline
+                </button>
+            </form>
+        </div>
+
+        <!-- Chronological Timeline -->
+        <div class="crm-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold text-dark mb-0"><i class="bi bi-clock-history text-primary me-2"></i>Activity History Timeline</h6>
+                <span class="badge bg-secondary rounded-pill small">@Model.Lead.Activities.Count</span>
+            </div>
+
+            @if (!Model.Lead.Activities.Any())
+            {
+                <div class="text-center py-4 text-muted small">No activity notes recorded yet.</div>
+            }
+            else
+            {
+                <div class="timeline position-relative ps-3 border-start">
+                    @foreach (var act in Model.Lead.Activities)
+                    {
+                        <div class="mb-3 position-relative ps-3">
+                            <div class="position-absolute rounded-circle bg-primary" 
+                                 style="width: 10px; height: 10px; left: -21px; top: 4px;"></div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-light text-dark border">@act.Type</span>
+                                <span class="text-muted text-xs" style="font-size: 0.72rem;">@act.OccurredAt.ToString("MMM dd, yyyy HH:mm")</span>
+                            </div>
+                            <p class="small text-dark mb-1 mt-1">@act.Description</p>
+                            <span class="text-xs text-secondary" style="font-size: 0.7rem;">Logged by @(act.User?.FullName ?? act.User?.UserName ?? "Staff")</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Schedule Follow-Up -->
+<div class="modal fade" id="scheduleFollowUpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="ScheduleFollowUp" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="leadId" value="@Model.Lead.LeadId" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Schedule Next Follow-Up</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Due Date & Time (UTC)</label>
+                        <input type="datetime-local" name="dueAt" class="form-control" value="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Follow-Up Channel</label>
+                        <select name="type" class="form-select">
+                            <option value="Call">Phone Call</option>
+                            <option value="Meeting">Virtual Meeting</option>
+                            <option value="Email">Email Follow-Up</option>
+                            <option value="Task">Internal Task</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Assign Staff Member</label>
+                        <select name="assignedUserId" class="form-select">
+                            @foreach (var user in Model.AvailableUsers)
+                            {
+                                <option value="@user.Id" selected="@(user.Id == Model.Lead.OwnerUserId ? "selected" : null)">
+                                    @(user.FullName ?? user.UserName)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Action Objective / Agenda</label>
+                        <textarea name="notes" class="form-control" rows="3" placeholder="Confirm quotation decision and timeline..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Schedule Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Complete Follow-up -->
+<div class="modal fade" id="completeFollowUpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="FollowUps" asp-action="Complete" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="followUpId" id="completeFollowUpId" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Record Follow-Up Completion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Outcome & Notes <span class="text-danger">*</span></label>
+                        <textarea name="outcomeNotes" class="form-control" rows="3" placeholder="Call answered. Customer confirmed purchase order approval..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Mark Completed</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Reassign Owner -->
+<div class="modal fade" id="reassignModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Assign" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="leadId" value="@Model.Lead.LeadId" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Reassign Lead Owner</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label small fw-semibold">Select New Owner</label>
+                    <select name="newOwnerUserId" class="form-select" required>
+                        @foreach (var user in Model.AvailableUsers)
+                        {
+                            <option value="@user.Id" selected="@(user.Id == Model.Lead.OwnerUserId ? "selected" : null)">
+                                @(user.FullName ?? user.UserName)
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Reassign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Update stage via AJAX
+        function updateStage(newStatus) {
+            fetch('/Leads/ChangeStatus', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                },
+                body: JSON.stringify({ leadId: @Model.Lead.LeadId, newStatus: parseInt(newStatus) || newStatus })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error changing status: ' + data.message);
+                }
+            })
+            .catch(err => console.error(err));
+        }
+
+        // Run AI Analysis via AJAX
+        function refreshAiAnalysis() {
+            const btn = document.getElementById('btnRunAi');
+            const spinner = document.getElementById('iconAiSpinner');
+            btn.disabled = true;
+            spinner.classList.add('bi-spin');
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+            fetch('/Leads/Analyze/@Model.Lead.LeadId', {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': token
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                spinner.classList.remove('bi-spin');
+
+                if (data.success) {
+                    document.getElementById('textAiScore').innerHTML = data.score + '<span class="text-muted fs-6 fw-normal">/100</span>';
+                    document.getElementById('barAiScore').style.width = data.score + '%';
+                    document.getElementById('textAiClass').innerText = data.classification + ' Lead';
+                    document.getElementById('textRisk').innerText = data.riskLevel + ' Risk';
+                    document.getElementById('textUrgency').innerText = data.urgency;
+                    document.getElementById('textAiSummary').innerText = data.summary;
+                    document.getElementById('textNextBestAction').innerText = data.nextBestAction;
+                    if (data.suggestedResponse) {
+                        document.getElementById('draftResponseText').value = data.suggestedResponse;
+                    }
+                    document.getElementById('textAiModel').innerText = 'Model: ' + data.model + ' (' + data.provider + ')';
+                    document.getElementById('textAiGeneratedAt').innerText = 'Evaluated: ' + data.generatedAt;
+
+                    // Update reasons
+                    if (data.reasons && data.reasons.length > 0) {
+                        let html = '<ul class="list-unstyled mb-0 d-flex flex-column gap-2">';
+                        data.reasons.forEach(r => {
+                            const isNeg = r.includes('Warning') || r.includes('Urgent') || r.includes('Inactive') || r.includes('Zero');
+                            html += `<li class="small d-flex align-items-start gap-2">
+                                <i class="bi ${isNeg ? 'bi-exclamation-triangle-fill text-danger' : 'bi-check-circle-fill text-success'} mt-1"></i>
+                                <span class="${isNeg ? 'text-danger fw-semibold' : 'text-dark'}">${r}</span>
+                            </li>`;
+                        });
+                        html += '</ul>';
+                        document.getElementById('factorsContainer').innerHTML = html;
+                    }
+                } else {
+                    alert('Could not run AI analysis: ' + data.message);
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                spinner.classList.remove('bi-spin');
+                console.error(err);
+            });
+        }
+
+        // Copy Response draft
+        function copyResponseDraft() {
+            const text = document.getElementById('draftResponseText').value;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Draft response copied to clipboard!');
+            });
+        }
+
+        // Regenerate custom draft
+        function regenerateCustomDraft() {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            const formData = new FormData();
+            formData.append('leadId', @Model.Lead.LeadId);
+            formData.append('userTone', 'Friendly, professional, and consultative');
+
+            fetch('/Leads/DraftResponse', {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('draftResponseText').value = data.draft;
+                }
+            });
+        }
+
+        function openCompleteModal(id) {
+            document.getElementById('completeFollowUpId').value = id;
+            new bootstrap.Modal(document.getElementById('completeFollowUpModal')).show();
+        }
+    </script>
+}
