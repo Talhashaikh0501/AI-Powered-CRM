@@ -1,0 +1,232 @@
+@model AI_Powered_CRM.ViewModels.SubscriptionDashboardViewModel
+@using AI_Powered_CRM.Models.Enums
+@{
+    ViewData["Title"] = "Subscription & Quotas";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h3 class="fw-bold text-dark mb-0">Subscription & Quotas</h3>
+            <span class="badge @(Model.Tier == SubscriptionTier.Enterprise ? "bg-dark text-white" : (Model.Tier == SubscriptionTier.Professional ? "bg-primary" : "bg-info text-dark"))">
+                @Model.Tier
+            </span>
+            <span class="badge @(Model.Status == SubscriptionStatus.Active ? "bg-success" : (Model.Status == SubscriptionStatus.Trialing ? "bg-warning text-dark" : "bg-danger"))">
+                @Model.Status
+            </span>
+        </div>
+        <p class="text-muted small mb-0">
+            Workspace: <strong>@Model.CompanyName</strong> (<span class="font-monospace">@Model.Slug</span>) • Default Currency: <strong>@Model.CurrencyCode (@Model.CurrencySymbol)</strong>
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Pricing" class="btn btn-primary btn-sm">
+            <i class="bi bi-arrow-up-circle-fill me-1"></i> Upgrade Plan
+        </a>
+        <a asp-action="Billing" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-receipt me-1"></i> Billing History
+        </a>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["InfoMessage"] != null)
+{
+    <div class="alert alert-info alert-dismissible fade show small" role="alert">
+        <i class="bi bi-info-circle-fill me-1"></i> @TempData["InfoMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Trial Expiration Notice -->
+@if (Model.IsTrialActive)
+{
+    <div class="card border-warning border-opacity-50 bg-warning bg-opacity-10 shadow-sm mb-4">
+        <div class="card-body p-3 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                    <i class="bi bi-hourglass-split fs-5"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-0 text-dark">Complimentary 14-Day Enterprise Trial Active</h6>
+                    <span class="small text-muted">
+                        You have <strong>@(Model.DaysLeftInTrial) days remaining</strong> (expires @Model.TrialEndsAt?.ToString("MMM dd, yyyy")). Full AI features and lead management are active with zero transaction charges.
+                    </span>
+                </div>
+            </div>
+            <a asp-action="Pricing" class="btn btn-sm btn-warning text-dark fw-semibold">
+                Explore Plans
+            </a>
+        </div>
+    </div>
+}
+
+<!-- Usage Quota Meters Grid -->
+<div class="row g-4 mb-4">
+    <!-- User Seats Meter -->
+    <div class="col-md-4">
+        <div class="crm-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-uppercase text-muted fw-bold" style="font-size: 0.72rem;">User Seats</span>
+                <span class="badge @(Model.SeatPercent >= 100 ? "bg-danger" : (Model.SeatPercent >= 80 ? "bg-warning text-dark" : "bg-success"))">
+                    @(Model.SeatPercent)%
+                </span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2 mb-2">
+                <h3 class="fw-bold text-dark mb-0">@Model.ActiveSeats</h3>
+                <span class="text-muted small">/ @Model.MaxSeats seats used</span>
+            </div>
+            <div class="progress mb-2" style="height: 8px;">
+                <div class="progress-bar @(Model.SeatPercent >= 100 ? "bg-danger" : (Model.SeatPercent >= 80 ? "bg-warning" : "bg-primary"))"
+                     role="progressbar" style="width: @(Model.SeatPercent)%;" aria-valuenow="@Model.SeatPercent" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center text-muted small mt-2">
+                <span>Available: @Math.Max(0, Model.MaxSeats - Model.ActiveSeats)</span>
+                <a asp-controller="Admin" asp-action="Invitations" class="text-primary text-decoration-none">Manage Team</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leads Quota Meter -->
+    <div class="col-md-4">
+        <div class="crm-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-uppercase text-muted fw-bold" style="font-size: 0.72rem;">Leads Storage</span>
+                <span class="badge @(Model.LeadsPercent >= 100 ? "bg-danger" : (Model.LeadsPercent >= 80 ? "bg-warning text-dark" : "bg-success"))">
+                    @(Model.LeadsPercent)%
+                </span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2 mb-2">
+                <h3 class="fw-bold text-dark mb-0">@Model.CurrentLeadsCount.ToString("N0")</h3>
+                <span class="text-muted small">/ @Model.MaxLeadsQuota.ToString("N0") leads</span>
+            </div>
+            <div class="progress mb-2" style="height: 8px;">
+                <div class="progress-bar @(Model.LeadsPercent >= 100 ? "bg-danger" : (Model.LeadsPercent >= 80 ? "bg-warning" : "bg-success"))"
+                     role="progressbar" style="width: @(Model.LeadsPercent)%;" aria-valuenow="@Model.LeadsPercent" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center text-muted small mt-2">
+                <span>Available: @Math.Max(0, Model.MaxLeadsQuota - Model.CurrentLeadsCount).ToString("N0")</span>
+                <a asp-controller="Leads" asp-action="Index" class="text-primary text-decoration-none">View Leads</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly AI Request Meter -->
+    <div class="col-md-4">
+        <div class="crm-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-uppercase text-muted fw-bold" style="font-size: 0.72rem;">Monthly AI Requests</span>
+                <span class="badge @(Model.AiPercent >= 100 ? "bg-danger" : (Model.AiPercent >= 80 ? "bg-warning text-dark" : "bg-info text-dark"))">
+                    @(Model.AiPercent)%
+                </span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2 mb-2">
+                <h3 class="fw-bold text-dark mb-0">@Model.CurrentMonthAiUsage.ToString("N0")</h3>
+                <span class="text-muted small">/ @Model.MonthlyAiRequestLimit.ToString("N0") calls</span>
+            </div>
+            <div class="progress mb-2" style="height: 8px;">
+                <div class="progress-bar @(Model.AiPercent >= 100 ? "bg-danger" : (Model.AiPercent >= 80 ? "bg-warning" : "bg-info"))"
+                     role="progressbar" style="width: @(Model.AiPercent)%;" aria-valuenow="@Model.AiPercent" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center text-muted small mt-2">
+                <span>Resets on 1st of month</span>
+                <span class="badge bg-light text-dark border">Groq AI</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Plan Management & Controls Card -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="crm-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-dark mb-0">Current Subscription Summary</h5>
+                <span class="badge bg-light text-dark border">
+                    @(Model.SubscriptionRenewsAt.HasValue ? $"Renews: {Model.SubscriptionRenewsAt:MMM dd, yyyy}" : "Billed Monthly")
+                </span>
+            </div>
+
+            @{
+                var currentPlanInfo = Model.Plans.FirstOrDefault(p => p.IsCurrentPlan) ?? Model.Plans.First();
+            }
+
+            <p class="text-secondary small mb-4">
+                @currentPlanInfo.Tagline
+            </p>
+
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6">
+                    <div class="p-3 bg-light rounded-3 border">
+                        <span class="text-muted small d-block mb-1">Pricing Rate:</span>
+                        <h4 class="fw-bold text-dark mb-0">@currentPlanInfo.MonthlyPriceDisplay <small class="fs-6 text-muted fw-normal">/ month</small></h4>
+                        <span class="small text-muted">(@currentPlanInfo.YearlyPriceDisplay / year if annual)</span>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="p-3 bg-light rounded-3 border">
+                        <span class="text-muted small d-block mb-1">Plan Entitlements:</span>
+                        <div class="small text-dark fw-semibold">
+                            @currentPlanInfo.MaxUserSeats Seats • @currentPlanInfo.MaxLeadsQuota.ToString("N0") Leads • @currentPlanInfo.MonthlyAiRequestLimit.ToString("N0") AI Calls
+                        </div>
+                        <span class="small text-success">Active & Verified</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-top pt-3 d-flex flex-wrap gap-2">
+                <a asp-action="Pricing" class="btn btn-primary btn-sm">
+                    <i class="bi bi-arrow-up-right-circle me-1"></i> Change Tier / Upgrade
+                </a>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#paymentComingSoonModal">
+                    <i class="bi bi-arrow-down-left-circle me-1"></i> Downgrade Plan
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#paymentComingSoonModal">
+                    <i class="bi bi-calendar3 me-1"></i> Change Billing Cycle
+                </button>
+                <a asp-action="Billing" class="btn btn-outline-info text-dark btn-sm">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Manage Invoices
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Help & FAQ Card -->
+    <div class="col-lg-4">
+        <div class="crm-card p-4 h-100">
+            <h6 class="fw-bold text-dark mb-3">Enterprise Assistance</h6>
+            <div class="d-flex flex-column gap-3 small text-secondary">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="bi bi-shield-check text-success fs-5"></i>
+                    <div>
+                        <strong class="text-dark d-block">Zero Overcharges</strong>
+                        Our platform never bills automatically without explicit user confirmation.
+                    </div>
+                </div>
+                <div class="d-flex align-items-start gap-2">
+                    <i class="bi bi-credit-card-2-front text-primary fs-5"></i>
+                    <div>
+                        <strong class="text-dark d-block">Payment Integration</strong>
+                        Automated credit card, UPI, and net-banking via Razorpay & Stripe arriving in final release.
+                    </div>
+                </div>
+                <div class="d-flex align-items-start gap-2">
+                    <i class="bi bi-envelope-at text-dark fs-5"></i>
+                    <div>
+                        <strong class="text-dark d-block">Custom Volume Needs?</strong>
+                        Contact <a href="mailto:support@crm.local" class="text-decoration-none">support@crm.local</a> for dedicated multi-tenant clusters.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<partial name="_PaymentComingSoonModal" />

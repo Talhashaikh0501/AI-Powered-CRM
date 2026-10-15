@@ -1,0 +1,83 @@
+@model AI_Powered_CRM.ViewModels.SwitchTenantViewModel
+@{
+    ViewData["Title"] = "Your Workspaces";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Your Workspaces</h3>
+        <p class="text-muted small mb-0">
+            Switch between organizations or launch a new company workspace.
+        </p>
+    </div>
+    <div>
+        <a asp-action="RegisterCompany" class="btn btn-primary btn-sm">
+            <i class="bi bi-building-add me-1"></i> Create New Workspace
+        </a>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+    @foreach (var ws in Model.Workspaces)
+    {
+        <div class="col">
+            <div class="crm-card p-4 h-100 d-flex flex-column justify-content-between @(ws.IsCurrent ? "border-primary border-2 shadow" : "")">
+                <div>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="rounded-3 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                            <i class="bi bi-building fs-4"></i>
+                        </div>
+                        <div class="d-flex flex-column align-items-end gap-1">
+                            @if (ws.IsCurrent)
+                            {
+                                <span class="badge bg-primary"><i class="bi bi-check-circle me-1"></i> Active Workspace</span>
+                            }
+                            <span class="badge bg-light text-dark border">@ws.SubscriptionTier</span>
+                        </div>
+                    </div>
+
+                    <h5 class="fw-bold text-dark mb-1">@ws.CompanyName</h5>
+                    <p class="font-monospace text-muted small mb-3">/t/@ws.Slug</p>
+
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="small text-muted">Your Role:</span>
+                        <span class="badge @(ws.CompanyRole == "CompanyAdmin" ? "bg-danger" : (ws.CompanyRole == "Manager" ? "bg-warning text-dark" : "bg-info text-dark"))">
+                            @ws.CompanyRole
+                        </span>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-top mt-3">
+                    @if (ws.IsCurrent)
+                    {
+                        <a asp-controller="Dashboard" asp-action="Index" class="btn btn-outline-primary w-100 btn-sm">
+                            <i class="bi bi-speedometer2 me-1"></i> Go to Dashboard
+                        </a>
+                    }
+                    else
+                    {
+                        <a asp-action="SwitchTenant" asp-route-tenantId="@ws.TenantId" class="btn btn-primary w-100 btn-sm">
+                            <i class="bi bi-arrow-repeat me-1"></i> Switch to Workspace
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>

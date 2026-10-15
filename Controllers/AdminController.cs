@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models;
+using AI_Powered_CRM.Models.Entities;
 using AI_Powered_CRM.Security;
 using AI_Powered_CRM.Services.Interfaces;
 using AI_Powered_CRM.ViewModels;
@@ -181,6 +182,108 @@ namespace AI_Powered_CRM.Controllers
             }
 
             return RedirectToAction(nameof(Invitations));
+        }
+
+        // GET: /Admin/Settings
+        public async Task<IActionResult> Settings()
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var tenant = await _context.Tenants
+                .IgnoreQueryFilters()
+                .Include(t => t.Settings)
+                .FirstOrDefaultAsync(t => t.TenantId == currentTenantId);
+
+            if (tenant == null)
+            {
+                return NotFound("Tenant not found.");
+            }
+
+            var vm = new CompanySettingsViewModel
+            {
+                TenantId = tenant.TenantId,
+                CompanyName = tenant.CompanyName,
+                Slug = tenant.Slug,
+                ContactEmail = tenant.ContactEmail,
+                Phone = tenant.Phone,
+                CurrencyCode = tenant.Settings?.CurrencyCode ?? tenant.DefaultCurrency ?? "INR",
+                CurrencySymbol = tenant.Settings?.CurrencySymbol ?? "₹",
+                DateFormat = tenant.Settings?.DateFormat ?? "dd/MM/yyyy",
+                TimeZoneId = tenant.Settings?.TimeZoneId ?? "India Standard Time",
+                FiscalYearStartMonth = tenant.Settings?.FiscalYearStartMonth ?? 4,
+                LeadAssignmentMode = tenant.Settings?.LeadAssignmentMode ?? "Manual",
+                RestrictLeadExport = tenant.Settings?.RestrictLeadExport ?? true
+            };
+
+            return View(vm);
+        }
+
+        // POST: /Admin/Settings
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Settings(CompanySettingsViewModel model)
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            if (model.TenantId != currentTenantId)
+            {
+                return Forbid();
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var tenant = await _context.Tenants
+                .IgnoreQueryFilters()
+                .Include(t => t.Settings)
+                .FirstOrDefaultAsync(t => t.TenantId == currentTenantId);
+
+            if (tenant == null)
+            {
+                return NotFound("Tenant not found.");
+            }
+
+            tenant.CompanyName = model.CompanyName.Trim();
+            tenant.ContactEmail = model.ContactEmail.Trim();
+            tenant.Phone = model.Phone?.Trim();
+            tenant.UpdatedAt = DateTime.UtcNow;
+
+            if (tenant.Settings == null)
+            {
+                tenant.Settings = new TenantSetting
+                {
+                    TenantId = tenant.TenantId,
+                    CurrencyCode = model.CurrencyCode.Trim(),
+                    CurrencySymbol = model.CurrencySymbol.Trim(),
+                    DateFormat = model.DateFormat.Trim(),
+                    TimeZoneId = model.TimeZoneId.Trim(),
+                    FiscalYearStartMonth = model.FiscalYearStartMonth,
+                    LeadAssignmentMode = model.LeadAssignmentMode,
+                    RestrictLeadExport = model.RestrictLeadExport,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.TenantSettings.Add(tenant.Settings);
+            }
+            else
+            {
+                tenant.Settings.CurrencyCode = model.CurrencyCode.Trim();
+                tenant.Settings.CurrencySymbol = model.CurrencySymbol.Trim();
+                tenant.Settings.DateFormat = model.DateFormat.Trim();
+                tenant.Settings.TimeZoneId = model.TimeZoneId.Trim();
+                tenant.Settings.FiscalYearStartMonth = model.FiscalYearStartMonth;
+                tenant.Settings.LeadAssignmentMode = model.LeadAssignmentMode;
+                tenant.Settings.RestrictLeadExport = model.RestrictLeadExport;
+                tenant.Settings.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "admin";
+            await _auditService.LogAsync(currentUserId, "TenantSetting", tenant.TenantId.ToString(), "CompanySettingsUpdated",
+                new { tenant.CompanyName, tenant.ContactEmail, model.CurrencySymbol, model.LeadAssignmentMode });
+
+            TempData["SuccessMessage"] = "Company preferences and workspace settings saved successfully.";
+            return RedirectToAction(nameof(Settings));
         }
     }
 }

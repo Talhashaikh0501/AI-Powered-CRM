@@ -1,13 +1,16 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models;
+using AI_Powered_CRM.Security;
 using AI_Powered_CRM.Services.Interfaces;
 using AI_Powered_CRM.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace AI_Powered_CRM.Controllers
@@ -19,6 +22,8 @@ namespace AI_Powered_CRM.Controllers
         private readonly IAuditService                  _auditService;
         private readonly ICompanyOnboardingService      _onboardingService;
         private readonly ITenantInvitationService       _invitationService;
+        private readonly ApplicationDbContext           _context;
+        private readonly ITenantContext                 _tenantContext;
         private readonly ILogger<AccountController>     _logger;
 
         public AccountController(
@@ -27,6 +32,8 @@ namespace AI_Powered_CRM.Controllers
             IAuditService                  auditService,
             ICompanyOnboardingService      onboardingService,
             ITenantInvitationService       invitationService,
+            ApplicationDbContext           context,
+            ITenantContext                 tenantContext,
             ILogger<AccountController>     logger)
         {
             _signInManager     = signInManager;
@@ -34,6 +41,8 @@ namespace AI_Powered_CRM.Controllers
             _auditService      = auditService;
             _onboardingService = onboardingService;
             _invitationService = invitationService;
+            _context           = context;
+            _tenantContext     = tenantContext;
             _logger            = logger;
         }
 
@@ -275,6 +284,93 @@ namespace AI_Powered_CRM.Controllers
 
             TempData["SuccessMessage"] = "Invitation accepted successfully. Please sign in with your password.";
             return RedirectToAction(nameof(Login));
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/SwitchTenant?tenantId=...&returnUrl=...
+        // -------------------------------------------------------
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> SwitchTenant(Guid tenantId, string? returnUrl = null)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId) || tenantId == Guid.Empty)
+            {
+                return RedirectToAction("Index", "Dashboard");
+            }
+
+            var membership = await _context.TenantMemberships
+                .IgnoreQueryFilters()
+                .Include(m => m.Tenant)
+                .FirstOrDefaultAsync(m => m.UserId == userId && m.TenantId == tenantId && m.IsActive);
+
+            if (membership == null || membership.Tenant == null || !membership.Tenant.IsActive)
+            {
+                TempData["ErrorMessage"] = "You do not have active membership in the specified workspace.";
+                return RedirectToAction("Index", "Dashboard");
+            }
+
+            Response.Cookies.Append(TenantResolutionMiddleware.ActiveTenantCookieName, tenantId.ToString(), new CookieOptions
+            {
+                HttpOnly = true,
+                SameSite = SameSiteMode.Lax,
+                Secure = Request.IsHttps,
+                Expires = DateTimeOffset.UtcNow.AddDays(30)
+            });
+
+            await _auditService.LogAsync(userId, "Tenant", tenantId.ToString(), "WorkspaceSwitched",
+                new { TargetTenantId = tenantId, TargetCompanyName = membership.Tenant.CompanyName });
+
+            TempData["SuccessMessage"] = $"Active workspace switched to {membership.Tenant.CompanyName}.";
+
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+
+            return RedirectToAction("Index", "Dashboard");
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/Workspaces
+        // -------------------------------------------------------
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> Workspaces()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return RedirectToAction(nameof(Login));
+            }
+
+            var currentTenantId = _tenantContext.CurrentTenantId;
+
+            var memberships = await _context.TenantMemberships
+                .IgnoreQueryFilters()
+                .Include(m => m.Tenant)
+                .Where(m => m.UserId == userId && m.IsActive)
+                .ToListAsync();
+
+            var currentTenant = memberships.FirstOrDefault(m => m.TenantId == currentTenantId)?.Tenant;
+
+            var vm = new SwitchTenantViewModel
+            {
+                CurrentTenantId = currentTenantId,
+                CurrentTenantName = currentTenant?.CompanyName ?? "Current Workspace",
+                Workspaces = memberships.Select(m => new UserWorkspaceItemDto
+                {
+                    TenantId = m.TenantId,
+                    CompanyName = m.Tenant?.CompanyName ?? "Workspace",
+                    Slug = m.Tenant?.Slug ?? string.Empty,
+                    CompanyRole = m.CompanyRole.ToString(),
+                    IsCurrent = m.TenantId == currentTenantId,
+                    SubscriptionTier = m.Tenant?.SubscriptionTier.ToString() ?? "FreeTrial",
+                    IsActive = m.IsActive && (m.Tenant?.IsActive ?? false)
+                }).ToList()
+            };
+
+            return View(vm);
         }
 
         // -------------------------------------------------------

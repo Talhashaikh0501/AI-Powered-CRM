@@ -1,0 +1,324 @@
+@model AI_Powered_CRM.ViewModels.PricingPageViewModel
+@using AI_Powered_CRM.Models.Enums
+@{
+    ViewData["Title"] = "Plans & Pricing";
+}
+
+<div class="container py-4">
+    <!-- Header Section -->
+    <div class="text-center max-w-750 mx-auto mb-5">
+        <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill fw-semibold mb-3">
+            <i class="bi bi-tag-fill me-1"></i> Transparent INR Pricing • Zero Hidden Fees
+        </span>
+        <h1 class="fw-bold text-dark mb-3 display-6">Scale Your Sales with AI Intelligence</h1>
+        <p class="text-muted lead fs-6 mx-auto" style="max-width: 650px;">
+            Choose a flexible tier tailored for your team size. All plans include Indian Rupee (₹) billing, multi-tenant security isolation, and Groq-accelerated AI scoring.
+        </p>
+
+        <!-- Monthly / Annual Toggle -->
+        <div class="d-inline-flex align-items-center gap-3 p-2 bg-light rounded-pill border shadow-sm mt-3">
+            <span class="small fw-semibold text-secondary ps-2" id="monthlyLabel">Monthly</span>
+            <div class="form-check form-switch m-0 d-flex align-items-center">
+                <input class="form-check-input" type="checkbox" role="switch" id="billingCycleToggle" style="width: 2.75rem; height: 1.4rem; cursor: pointer;">
+            </div>
+            <span class="small fw-semibold text-dark pe-2" id="annualLabel">
+                Annual <span class="badge bg-success text-white rounded-pill ms-1">Save 20%</span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Pricing Cards Grid -->
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4 mb-5 align-items-stretch">
+        @foreach (var plan in Model.Plans)
+        {
+            var isCurrent = plan.IsCurrentPlan;
+            var isRec = plan.IsRecommended;
+
+            <div class="col d-flex">
+                <div class="card w-100 border-0 shadow-sm rounded-4 overflow-hidden d-flex flex-column position-relative @(isRec ? "border border-2 border-primary shadow" : "border")">
+                    @if (isRec)
+                    {
+                        <div class="position-absolute top-0 end-0 bg-primary text-white small fw-bold px-3 py-1 rounded-bottom-start shadow-sm" style="font-size: 0.72rem; letter-spacing: 0.05em;">
+                            MOST POPULAR
+                        </div>
+                    }
+
+                    <div class="p-4 bg-white flex-grow-1 d-flex flex-column">
+                        <div class="mb-3">
+                            <h5 class="fw-bold text-dark mb-1">@plan.Name</h5>
+                            <p class="text-muted small mb-0" style="min-height: 40px;">@plan.Tagline</p>
+                        </div>
+
+                        <!-- Price display -->
+                        <div class="mb-4 pb-3 border-bottom">
+                            <div class="d-flex align-items-baseline gap-1">
+                                <span class="fs-2 fw-bold text-dark price-monthly">@plan.MonthlyPriceDisplay</span>
+                                <span class="fs-2 fw-bold text-dark price-annual d-none">
+                                    @(plan.YearlyPriceInr == 0 ? "₹0" : $"₹{((int)(plan.YearlyPriceInr / 12)):N0}")
+                                </span>
+                                <span class="text-muted small">/ month</span>
+                            </div>
+                            <div class="text-muted small mt-1 price-annual d-none">
+                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : "Free 14-day evaluation")
+                            </div>
+                            <div class="text-muted small mt-1 price-monthly">
+                                @(plan.MonthlyPriceInr > 0 ? "Billed on a monthly cycle" : "No credit card required")
+                            </div>
+                        </div>
+
+                        <!-- Highlights -->
+                        <div class="mb-4">
+                            <span class="text-uppercase text-muted fw-bold" style="font-size: 0.68rem; letter-spacing: 0.05em;">Key Quotas</span>
+                            <ul class="list-unstyled d-flex flex-column gap-2 mt-2 mb-0">
+                                <li class="d-flex align-items-center gap-2 small text-dark">
+                                    <i class="bi bi-people-fill text-primary"></i>
+                                    <span><strong>@plan.MaxUserSeats</strong> Team Seats</span>
+                                </li>
+                                <li class="d-flex align-items-center gap-2 small text-dark">
+                                    <i class="bi bi-funnel-fill text-primary"></i>
+                                    <span><strong>@plan.MaxLeadsQuota.ToString("N0")</strong> Leads Quota</span>
+                                </li>
+                                <li class="d-flex align-items-center gap-2 small text-dark">
+                                    <i class="bi bi-cpu-fill text-primary"></i>
+                                    <span><strong>@plan.MonthlyAiRequestLimit.ToString("N0")</strong> AI Requests / mo</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Included Features -->
+                        <div class="mb-4 flex-grow-1">
+                            <span class="text-uppercase text-muted fw-bold" style="font-size: 0.68rem; letter-spacing: 0.05em;">Included Features</span>
+                            <ul class="list-unstyled d-flex flex-column gap-2 mt-2 mb-0">
+                                @foreach (var feat in plan.IncludedFeatures)
+                                {
+                                    <li class="d-flex align-items-start gap-2 small text-secondary">
+                                        <i class="bi bi-check-lg text-success fw-bold mt-1"></i>
+                                        <span>@feat</span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+
+                        <!-- Action Button -->
+                        <div class="pt-2">
+                            @if (isCurrent)
+                            {
+                                <button type="button" class="btn btn-outline-secondary w-100 py-2 fw-semibold" disabled>
+                                    <i class="bi bi-check2-circle me-1"></i> Current Plan
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn @(isRec ? "btn-primary shadow-sm" : "btn-outline-primary") w-100 py-2 fw-semibold"
+                                        data-bs-toggle="modal" data-bs-target="#paymentComingSoonModal">
+                                    @(plan.Tier == SubscriptionTier.FreeTrial ? "Start Free Trial" : "Select " + plan.Name)
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Feature Comparison Matrix -->
+    <div class="crm-card p-4 p-md-5 mb-5 overflow-hidden">
+        <div class="text-center mb-4">
+            <h4 class="fw-bold text-dark mb-1">Detailed Plan Comparison</h4>
+            <p class="text-muted small">Everything you need to evaluate capabilities across all subscription tiers.</p>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                <thead class="table-light text-uppercase text-muted" style="font-size: 0.72rem;">
+                    <tr>
+                        <th class="ps-4" style="width: 36%;">Feature Capability</th>
+                        <th class="text-center" style="width: 16%;">Free Trial</th>
+                        <th class="text-center" style="width: 16%;">Starter</th>
+                        <th class="text-center bg-primary bg-opacity-10 text-primary" style="width: 16%;">Professional</th>
+                        <th class="text-center" style="width: 16%;">Enterprise</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">User Seats Allowed</td>
+                        <td class="text-center text-muted">5 Seats</td>
+                        <td class="text-center text-muted">10 Seats</td>
+                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">25 Seats</td>
+                        <td class="text-center text-muted">100+ Seats</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Active Lead Quota</td>
+                        <td class="text-center text-muted">1,000</td>
+                        <td class="text-center text-muted">5,000</td>
+                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">25,000</td>
+                        <td class="text-center text-muted">100,000+</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Groq AI Scoring Credits / mo</td>
+                        <td class="text-center text-muted">200</td>
+                        <td class="text-center text-muted">1,000</td>
+                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">5,000</td>
+                        <td class="text-center text-muted">25,000</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">AI Win Probability & Risk Detection</td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Follow-up Task Reminders & Queues</td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Conversion Pipeline Analytics</td>
+                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Zero-Data-Leakage Tenant Isolation</td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Role-Based Access Control (Admin, Manager, Rep)</td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Lead Export Admin Protection</td>
+                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
+                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
+                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Security Audit Trail Retention</td>
+                        <td class="text-center text-muted">7 Days</td>
+                        <td class="text-center text-muted">30 Days</td>
+                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">90 Days</td>
+                        <td class="text-center text-muted">Unlimited</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Support Access Ticketing (Anti-Self-Approval)</td>
+                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
+                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
+                        <td class="text-center text-muted bg-primary bg-opacity-10"><i class="bi bi-dash"></i></td>
+                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 fw-semibold text-dark">Support Response SLA</td>
+                        <td class="text-center text-muted">Community</td>
+                        <td class="text-center text-muted">24 Hours</td>
+                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">4 Hours</td>
+                        <td class="text-center text-muted">1 Hour (24/7)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="text-center mb-4">
+                <h4 class="fw-bold text-dark mb-1">Frequently Asked Questions</h4>
+                <p class="text-muted small">Answers to common billing and plan configuration questions.</p>
+            </div>
+
+            <div class="accordion accordion-flush crm-card p-3" id="pricingFaqAccordion">
+                <div class="accordion-item border-bottom">
+                    <h2 class="accordion-header" id="faqOne">
+                        <button class="accordion-button collapsed fw-semibold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+                            Are prices inclusive of Indian GST?
+                        </button>
+                    </h2>
+                    <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="faqOne" data-bs-parent="#pricingFaqAccordion">
+                        <div class="accordion-body text-muted small">
+                            All prices are quoted in Indian Rupees (INR ₹). When payment gateway billing is activated in the upcoming release, GST compliant invoices with your company's GSTIN will be generated automatically.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item border-bottom">
+                    <h2 class="accordion-header" id="faqTwo">
+                        <button class="accordion-button collapsed fw-semibold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                            What happens when my 14-day free trial ends?
+                        </button>
+                    </h2>
+                    <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="faqTwo" data-bs-parent="#pricingFaqAccordion">
+                        <div class="accordion-body text-muted small">
+                            Your workspace data remains completely safe and isolated. You will receive notifications to select an active tier. No unexpected charges will ever be applied to your account.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item border-bottom">
+                    <h2 class="accordion-header" id="faqThree">
+                        <button class="accordion-button collapsed fw-semibold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                            Can I add more user seats or upgrade mid-cycle?
+                        </button>
+                    </h2>
+                    <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="faqThree" data-bs-parent="#pricingFaqAccordion">
+                        <div class="accordion-body text-muted small">
+                            Yes. Workspace administrators can invite team members up to their plan limit. In the final phase, prorated upgrades and additional seat add-on packs will be available directly from your billing portal.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="faqFour">
+                        <button class="accordion-button collapsed fw-semibold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFour" aria-expanded="false" aria-controls="collapseFour">
+                            How does AI request quota replenishment work?
+                        </button>
+                    </h2>
+                    <div id="collapseFour" class="accordion-collapse collapse" aria-labelledby="faqFour" data-bs-parent="#pricingFaqAccordion">
+                        <div class="accordion-body text-muted small">
+                            AI scoring and risk prediction quotas reset automatically on the 1st of each calendar month. If your usage exceeds the limit, our zero-cost deterministic fallback scoring continues to classify leads seamlessly.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<partial name="_PaymentComingSoonModal" />
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const toggle = document.getElementById('billingCycleToggle');
+            const monthlyPrices = document.querySelectorAll('.price-monthly');
+            const annualPrices = document.querySelectorAll('.price-annual');
+            const monthlyLabel = document.getElementById('monthlyLabel');
+            const annualLabel = document.getElementById('annualLabel');
+
+            toggle.addEventListener('change', function () {
+                if (this.checked) {
+                    monthlyPrices.forEach(el => el.classList.add('d-none'));
+                    annualPrices.forEach(el => el.classList.remove('d-none'));
+                    monthlyLabel.classList.remove('text-dark', 'fw-bold');
+                    monthlyLabel.classList.add('text-secondary');
+                    annualLabel.classList.add('text-dark', 'fw-bold');
+                } else {
+                    annualPrices.forEach(el => el.classList.add('d-none'));
+                    monthlyPrices.forEach(el => el.classList.remove('d-none'));
+                    annualLabel.classList.remove('text-dark', 'fw-bold');
+                    monthlyLabel.classList.add('text-dark', 'fw-bold');
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,174 @@
+@model AI_Powered_CRM.ViewModels.CompanySettingsViewModel
+@{
+    ViewData["Title"] = "Company Preferences & Settings";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Company Settings</h3>
+        <p class="text-muted small mb-0">
+            Configure organization identity, regional currency defaults, and CRM access policies.
+        </p>
+    </div>
+    <div>
+        <a asp-action="Users" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-people me-1"></i> Manage Users
+        </a>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger py-2 small" role="alert">
+        @Html.ValidationSummary(false, "", new { @class = "mb-0" })
+    </div>
+}
+
+<form asp-action="Settings" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="TenantId" />
+
+    <div class="row g-4">
+        <!-- Organization Identity -->
+        <div class="col-lg-6">
+            <div class="crm-card p-4 h-100">
+                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                    <i class="bi bi-building text-primary fs-5"></i>
+                    <h5 class="fw-bold text-dark mb-0">Workspace Identity</h5>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="CompanyName" class="form-label small fw-semibold text-secondary"></label>
+                    <input asp-for="CompanyName" class="form-control" placeholder="Company Name" />
+                    <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Slug" class="form-label small fw-semibold text-secondary"></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-link-45deg"></i></span>
+                        <input asp-for="Slug" class="form-control border-start-0 bg-light" readonly />
+                    </div>
+                    <small class="text-muted">Unique organization identifier used in routing.</small>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="ContactEmail" class="form-label small fw-semibold text-secondary"></label>
+                    <input asp-for="ContactEmail" class="form-control" placeholder="admin@company.com" />
+                    <span asp-validation-for="ContactEmail" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-0">
+                    <label asp-for="Phone" class="form-label small fw-semibold text-secondary"></label>
+                    <input asp-for="Phone" class="form-control" placeholder="+91 98765 43210" />
+                    <span asp-validation-for="Phone" class="text-danger small"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Regional & Currency Settings (INR Defaults) -->
+        <div class="col-lg-6">
+            <div class="crm-card p-4 h-100">
+                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                    <i class="bi bi-globe-central-south-asia text-primary fs-5"></i>
+                    <h5 class="fw-bold text-dark mb-0">Regional & Currency Defaults</h5>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label asp-for="CurrencyCode" class="form-label small fw-semibold text-secondary"></label>
+                        <input asp-for="CurrencyCode" class="form-control" readonly />
+                        <span asp-validation-for="CurrencyCode" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="CurrencySymbol" class="form-label small fw-semibold text-secondary"></label>
+                        <input asp-for="CurrencySymbol" class="form-control" readonly />
+                        <span asp-validation-for="CurrencySymbol" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="DateFormat" class="form-label small fw-semibold text-secondary"></label>
+                    <select asp-for="DateFormat" class="form-select">
+                        <option value="dd/MM/yyyy">dd/MM/yyyy (e.g. 15/10/2026 - Standard India)</option>
+                        <option value="yyyy-MM-dd">yyyy-MM-dd (ISO 8601)</option>
+                        <option value="MM/dd/yyyy">MM/dd/yyyy (US)</option>
+                    </select>
+                    <span asp-validation-for="DateFormat" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="TimeZoneId" class="form-label small fw-semibold text-secondary"></label>
+                    <select asp-for="TimeZoneId" class="form-select">
+                        <option value="India Standard Time">India Standard Time (IST, UTC+05:30)</option>
+                        <option value="UTC">Coordinated Universal Time (UTC)</option>
+                        <option value="Singapore Standard Time">Singapore Standard Time (SGT, UTC+08:00)</option>
+                        <option value="Arabian Standard Time">Arabian Standard Time (GST, UTC+04:00)</option>
+                        <option value="GMT Standard Time">Greenwich Mean Time (GMT, UTC+00:00)</option>
+                    </select>
+                    <span asp-validation-for="TimeZoneId" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-0">
+                    <label asp-for="FiscalYearStartMonth" class="form-label small fw-semibold text-secondary"></label>
+                    <select asp-for="FiscalYearStartMonth" class="form-select">
+                        <option value="4">April (India Fiscal Year Q1: Apr - Jun)</option>
+                        <option value="1">January (Calendar Year)</option>
+                        <option value="7">July (Q3)</option>
+                        <option value="10">October (Q4)</option>
+                    </select>
+                    <span asp-validation-for="FiscalYearStartMonth" class="text-danger small"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CRM Rules & Governance -->
+        <div class="col-12">
+            <div class="crm-card p-4">
+                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                    <i class="bi bi-shield-check text-primary fs-5"></i>
+                    <h5 class="fw-bold text-dark mb-0">Lead Governance & Security</h5>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label asp-for="LeadAssignmentMode" class="form-label small fw-semibold text-secondary"></label>
+                        <select asp-for="LeadAssignmentMode" class="form-select">
+                            <option value="Manual">Manual Assignment (Assigned by Sales Managers)</option>
+                            <option value="RoundRobin">Round Robin (Automatic distribution across active sales reps)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">Defines how incoming leads are routed to sales reps.</small>
+                    </div>
+
+                    <div class="col-md-6 d-flex align-items-center">
+                        <div class="form-check form-switch pt-2">
+                            <input asp-for="RestrictLeadExport" class="form-check-input" type="checkbox" id="restrictExportSwitch" style="width: 2.5rem; height: 1.3rem;">
+                            <label class="form-check-label small fw-semibold text-dark ms-2" for="restrictExportSwitch">
+                                Restrict Lead Export to Company Administrators Only
+                            </label>
+                            <small class="text-muted d-block ms-2">Prevents non-admin reps and managers from bulk downloading lead contact databases.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-end">
+        <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold shadow-sm">
+            <i class="bi bi-check-lg me-1"></i> Save Changes
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -22,6 +22,7 @@ namespace AI_Powered_CRM.Security
         public const string TenantSlugHeaderName = "X-Tenant-Slug";
         public const string SupportReasonHeaderName = "X-Support-Reason";
         public const string SupportTicketHeaderName = "X-Support-Ticket";
+        public const string ActiveTenantCookieName = "crm_active_tenant_id";
 
         public TenantResolutionMiddleware(RequestDelegate next, ILogger<TenantResolutionMiddleware> logger)
         {
@@ -52,12 +53,19 @@ namespace AI_Powered_CRM.Security
                 tenantContext.SetPlatformSuperAdmin(true);
             }
 
-            // 3. Inspect requested tenant header (if provided)
+            // 3. Inspect requested tenant header (if provided) or active tenant cookie
             Guid? headerTenantId = null;
+            bool isFromHeader = false;
             if (context.Request.Headers.TryGetValue(TenantHeaderName, out var headerVal) &&
                 Guid.TryParse(headerVal, out var parsedHeaderId))
             {
                 headerTenantId = parsedHeaderId;
+                isFromHeader = true;
+            }
+            else if (context.Request.Cookies.TryGetValue(ActiveTenantCookieName, out var cookieTenantVal) &&
+                     Guid.TryParse(cookieTenantVal, out var parsedCookieTenantId))
+            {
+                headerTenantId = parsedCookieTenantId;
             }
 
             // 4. Handle Platform SuperAdmin: Require Server-Verified, Authorized, Audited Delegated Support Access
@@ -171,31 +179,41 @@ namespace AI_Powered_CRM.Security
 
                 if (membership == null)
                 {
-                    _logger.LogWarning("SECURITY ALERT: User {UserId} attempted unauthorized access to tenant {TenantId} via header tampering.", userId, headerTenantId.Value);
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    await WriteForbiddenOrErrorAsync(context, "Forbidden: You do not have active membership in the specified company.");
-                    return;
+                    if (isFromHeader)
+                    {
+                        _logger.LogWarning("SECURITY ALERT: User {UserId} attempted unauthorized access to tenant {TenantId} via header tampering.", userId, headerTenantId.Value);
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        await WriteForbiddenOrErrorAsync(context, "Forbidden: You do not have active membership in the specified company.");
+                        return;
+                    }
+                    else
+                    {
+                        // Clean up stale or invalid cookie and fallback to default membership
+                        context.Response.Cookies.Delete(ActiveTenantCookieName);
+                        headerTenantId = null;
+                    }
                 }
-
-                if (!membership.IsActive)
+                else if (!membership.IsActive)
                 {
                     _logger.LogWarning("SECURITY ALERT: User {UserId} attempted access with inactive membership to tenant {TenantId}.", userId, headerTenantId.Value);
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     await WriteForbiddenOrErrorAsync(context, "Forbidden: Your organization membership has been deactivated.");
                     return;
                 }
-
-                if (membership.Tenant == null || !membership.Tenant.IsActive)
+                else if (membership.Tenant == null || !membership.Tenant.IsActive)
                 {
                     _logger.LogWarning("SECURITY ALERT: User {UserId} attempted access to suspended tenant {TenantId}.", userId, headerTenantId.Value);
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     await WriteForbiddenOrErrorAsync(context, "Forbidden: Your organization account is currently inactive or suspended.");
                     return;
                 }
-
-                tenantContext.SetTenant(membership.TenantId, membership.Tenant.Slug);
+                else
+                {
+                    tenantContext.SetTenant(membership.TenantId, membership.Tenant.Slug);
+                }
             }
-            else
+
+            if (!headerTenantId.HasValue)
             {
                 var tenantClaim = context.User.FindFirst(TenantIdClaimType)?.Value;
                 TenantMembership? activeMembership = null;

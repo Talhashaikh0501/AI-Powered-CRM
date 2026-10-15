@@ -225,6 +225,7 @@ builder.Services.AddSingleton<IBackgroundJobScopeFactory, BackgroundJobScopeFact
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ISubscriptionQuotaService, SubscriptionQuotaService>();
+builder.Services.AddScoped<ISubscriptionBillingService, SubscriptionBillingService>();
 builder.Services.AddScoped<ISupportAccessService, SupportAccessService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();

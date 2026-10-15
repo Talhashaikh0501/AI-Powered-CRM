@@ -349,11 +349,25 @@
                                 <span>Conversion Reports</span>
                             </a>
                         </li>
+                        <li class="nav-item-custom">
+                            <a class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Subscription" && ViewContext.RouteData.Values["Action"]?.ToString() == "Index" ? "active" : "")"
+                               asp-controller="Subscription" asp-action="Index">
+                                <i class="bi bi-speedometer2"></i>
+                                <span>Subscription & Quotas</span>
+                            </a>
+                        </li>
                     }
 
                     @if (User.IsInRole("Admin") || User.IsInRole("CompanyAdmin"))
                     {
                         <li class="nav-section-title">Administration</li>
+                        <li class="nav-item-custom">
+                            <a class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Admin" && ViewContext.RouteData.Values["Action"]?.ToString() == "Settings" ? "active" : "")"
+                               asp-controller="Admin" asp-action="Settings">
+                                <i class="bi bi-gear-wide-connected"></i>
+                                <span>Company Settings</span>
+                            </a>
+                        </li>
                         <li class="nav-item-custom">
                             <a class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Admin" && ViewContext.RouteData.Values["Action"]?.ToString() == "Users" ? "active" : "")"
                                asp-controller="Admin" asp-action="Users">
@@ -377,7 +391,14 @@
                         </li>
                     }
 
-                    <li class="nav-section-title">Developer & Docs</li>
+                    <li class="nav-section-title">Plans & Developer</li>
+                    <li class="nav-item-custom">
+                        <a class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Subscription" && ViewContext.RouteData.Values["Action"]?.ToString() == "Pricing" ? "active" : "")"
+                           asp-controller="Subscription" asp-action="Pricing">
+                            <i class="bi bi-tag-fill"></i>
+                            <span>Plans & Pricing</span>
+                        </a>
+                    </li>
                     <li class="nav-item-custom">
                         <a class="nav-link-custom" href="/swagger" target="_blank">
                             <i class="bi bi-braces"></i>
@@ -439,6 +460,22 @@
                                         <div class="fw-bold small text-truncate">@User.Identity?.Name</div>
                                         <div class="text-muted text-xs" style="font-size: 0.72rem;">Role: @(User.IsInRole("Admin") ? "Admin" : (User.IsInRole("Manager") ? "Manager" : "Sales Executive"))</div>
                                     </div>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item small py-2" asp-controller="Account" asp-action="Workspaces">
+                                        <i class="bi bi-arrow-repeat me-2 text-primary"></i> Switch Workspace
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item small py-2" asp-controller="Subscription" asp-action="Index">
+                                        <i class="bi bi-speedometer2 me-2 text-info"></i> Subscription & Quotas
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item small py-2" asp-controller="Subscription" asp-action="Pricing">
+                                        <i class="bi bi-tag me-2 text-success"></i> Plans & Pricing
+                                    </a>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
