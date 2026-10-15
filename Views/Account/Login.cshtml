@@ -1,4 +1,5 @@
 @model AI_Powered_CRM.Controllers.LoginViewModel
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnv
 @{
     ViewData["Title"] = "Sign In";
     Layout = "_Layout";
@@ -91,24 +92,27 @@
                     </button>
                 </form>
 
-                <!-- One-Click Demo Role Selector -->
-                <div class="border-top pt-3">
-                    <div class="text-muted small text-center mb-2 fw-semibold">Quick Demo Login (One-Click)</div>
-                    <div class="d-flex flex-column gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-between" onclick="fillDemo('admin@crm.local', 'Admin@123')">
-                            <span><i class="bi bi-shield-fill-check me-1"></i> System Administrator</span>
-                            <span class="badge bg-primary">Admin</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-between" onclick="fillDemo('manager@crm.local', 'Manager@123')">
-                            <span><i class="bi bi-people-fill me-1"></i> Sales Manager</span>
-                            <span class="badge bg-secondary">Manager</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-info text-dark d-flex align-items-center justify-content-between" onclick="fillDemo('sales@crm.local', 'Sales@123')">
-                            <span><i class="bi bi-person-badge-fill me-1"></i> Sales Executive</span>
-                            <span class="badge bg-info text-dark">Executive</span>
-                        </button>
+                @if (HostEnv.IsDevelopment())
+                {
+                    <!-- One-Click Demo Role Selector (Development Only) -->
+                    <div class="border-top pt-3">
+                        <div class="text-muted small text-center mb-2 fw-semibold">Quick Demo Login (Development Only)</div>
+                        <div class="d-flex flex-column gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-between" onclick="fillDemo('admin@crm.local', 'Admin@123')">
+                                <span><i class="bi bi-shield-fill-check me-1"></i> System Administrator</span>
+                                <span class="badge bg-primary">Admin</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-between" onclick="fillDemo('manager@crm.local', 'Manager@123')">
+                                <span><i class="bi bi-people-fill me-1"></i> Sales Manager</span>
+                                <span class="badge bg-secondary">Manager</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info text-dark d-flex align-items-center justify-content-between" onclick="fillDemo('sales@crm.local', 'Sales@123')">
+                                <span><i class="bi bi-person-badge-fill me-1"></i> Sales Executive</span>
+                                <span class="badge bg-info text-dark">Executive</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
+                }
             </div>
         </div>
     </div>
@@ -116,11 +120,14 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    <script>
-        function fillDemo(email, pass) {
-            document.getElementById('emailInput').value = email;
-            document.getElementById('passwordInput').value = pass;
-            document.getElementById('loginForm').submit();
-        }
-    </script>
+    @if (HostEnv.IsDevelopment())
+    {
+        <script>
+            function fillDemo(email, pass) {
+                document.getElementById('emailInput').value = email;
+                document.getElementById('passwordInput').value = pass;
+                document.getElementById('loginForm').submit();
+            }
+        </script>
+    }
 }

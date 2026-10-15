@@ -22,14 +22,31 @@ namespace AI_Powered_CRM.Services.Implementations
             _logger = logger;
         }
 
-        public async Task LogAsync(string? userId, string entityType, string entityId, string action, object? details = null)
+        public async Task LogAsync(
+            string? userId, 
+            string entityType, 
+            string entityId, 
+            string action, 
+            object? details = null, 
+            bool isSecurityCritical = false)
         {
             try
             {
+                // Verify if userId is a valid user id; if anonymous or invalid, set to null to protect FK constraints
+                string? validUserId = null;
+                if (!string.IsNullOrWhiteSpace(userId) && userId != "anonymous")
+                {
+                    var userExists = await _context.Users.AnyAsync(u => u.Id == userId);
+                    if (userExists)
+                    {
+                        validUserId = userId;
+                    }
+                }
+
                 var detailsJson = details != null ? JsonSerializer.Serialize(details) : "{}";
                 var log = new AuditLog
                 {
-                    UserId = userId,
+                    UserId = validUserId,
                     EntityType = entityType,
                     EntityId = entityId,
                     Action = action,
@@ -42,7 +59,14 @@ namespace AI_Powered_CRM.Services.Implementations
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to record audit log for Entity {EntityType} {EntityId}", entityType, entityId);
+                _logger.LogError(ex, "Failed to record audit log for Entity {EntityType} {EntityId} {Action}", entityType, entityId, action);
+
+                // Critical security operations must never fail silently
+                if (isSecurityCritical || entityType == "Security" || entityType == "Auth" || action.Contains("Lockout") || action.Contains("ToggleStatus"))
+                {
+                    _logger.LogCritical(ex, "CRITICAL AUDIT FAILURE: Failed to persist mandatory security audit trail for {EntityType}:{EntityId}:{Action}", entityType, entityId, action);
+                    throw new InvalidOperationException($"Critical security audit log failed to persist for {entityType}:{action}.", ex);
+                }
             }
         }
 

@@ -43,13 +43,16 @@ namespace AI_Powered_CRM.Services.Implementations
             if (lead == null)
                 throw new InvalidOperationException("Lead not found or archived.");
 
-            // Ownership check
-            if (currentUserRole == "SalesExecutive" && lead.OwnerUserId != currentUserId)
+            // Ownership check: Admin and Manager have access to all leads; all others must own the lead
+            if (currentUserRole != "Admin" && currentUserRole != "Manager")
             {
-                _logger.LogWarning(
-                    "Unauthorized activity attempt. User {UserId} tried to add activity to Lead {LeadId} owned by {OwnerId}.",
-                    currentUserId, dto.LeadId, lead.OwnerUserId);
-                throw new UnauthorizedAccessException("You do not have permission to log activities on this lead.");
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                {
+                    _logger.LogWarning(
+                        "Unauthorized activity attempt. User {UserId} with role {Role} tried to add activity to Lead {LeadId} owned by {OwnerId}.",
+                        currentUserId, currentUserRole, dto.LeadId, lead.OwnerUserId);
+                    throw new UnauthorizedAccessException("You do not have permission to log activities on this lead.");
+                }
             }
 
             var activity = new LeadActivity
@@ -74,7 +77,7 @@ namespace AI_Powered_CRM.Services.Implementations
         }
 
         /// <summary>
-        /// Returns activities for a lead, scoped to ownership for SalesExecutive role.
+        /// Returns activities for a lead, scoped to ownership for non-Admin/Manager roles.
         /// </summary>
         public async Task<List<LeadActivity>> GetActivitiesAsync(
             int    leadId,
@@ -89,8 +92,11 @@ namespace AI_Powered_CRM.Services.Implementations
             if (lead == null)
                 return new List<LeadActivity>();
 
-            if (currentUserRole == "SalesExecutive" && lead.OwnerUserId != currentUserId)
-                return new List<LeadActivity>(); // silently return empty (ownership enforced)
+            if (currentUserRole != "Admin" && currentUserRole != "Manager")
+            {
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                    return new List<LeadActivity>(); // silently return empty (ownership enforced)
+            }
 
             return await _context.LeadActivities
                 .Include(a => a.User)

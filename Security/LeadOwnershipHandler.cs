@@ -23,13 +23,6 @@ namespace AI_Powered_CRM.Security
             LeadOwnershipRequirement requirement,
             int leadId)
         {
-            // Admin and Manager bypass ownership check
-            if (context.User.IsInRole("Admin") || context.User.IsInRole("Manager"))
-            {
-                context.Succeed(requirement);
-                return;
-            }
-
             var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
@@ -41,7 +34,21 @@ namespace AI_Powered_CRM.Security
                 .AsNoTracking()
                 .FirstOrDefaultAsync(l => l.LeadId == leadId && !l.IsArchived);
 
-            if (lead != null && lead.OwnerUserId == userId)
+            if (lead == null)
+            {
+                context.Fail();
+                return;
+            }
+
+            // CompanyAdmin, Admin, and Manager can access any lead within their tenant
+            if (context.User.IsInRole("CompanyAdmin") || context.User.IsInRole("Admin") || context.User.IsInRole("Manager"))
+            {
+                context.Succeed(requirement);
+                return;
+            }
+
+            // SalesExecutive can only access their owned lead
+            if (lead.OwnerUserId == userId)
             {
                 context.Succeed(requirement);
             }

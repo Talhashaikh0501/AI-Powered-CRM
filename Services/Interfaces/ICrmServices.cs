@@ -20,7 +20,7 @@ namespace AI_Powered_CRM.Services.Interfaces
             int           pageSize = 15);
 
         Task<Lead?>         GetLeadDetailsAsync(int id, string? currentUserId, string? role);
-        Task<Lead>          CreateLeadAsync(CreateLeadDto dto, string currentUserId);
+        Task<Lead>          CreateLeadAsync(CreateLeadDto dto, string currentUserId, string? role = null);
         Task<bool>          UpdateLeadAsync(UpdateLeadDto dto, string currentUserId, string role);
         Task<bool>          ChangeStatusAsync(int leadId, LeadStatus newStatus, string? notes, string currentUserId, string role);
         Task<bool>          AssignLeadAsync(int leadId, string newOwnerId, string assignedByUserId, string role);

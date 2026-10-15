@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AI_Powered_CRM.DTOs;
+using AI_Powered_CRM.Helpers;
 using AI_Powered_CRM.Models.Entities;
 using AI_Powered_CRM.Models.Enums;
 
@@ -20,22 +21,22 @@ namespace AI_Powered_CRM.AI
                 if (lead.Budget.Value >= 100000m)
                 {
                     score += 25;
-                    reasons.Add("High-value enterprise budget fit ($" + lead.Budget.Value.ToString("N0") + ")");
+                    reasons.Add("High-value enterprise budget fit (" + CurrencyHelper.FormatINRRounded(lead.Budget.Value) + ")");
                 }
                 else if (lead.Budget.Value >= 50000m)
                 {
                     score += 15;
-                    reasons.Add("Strong mid-market budget ($" + lead.Budget.Value.ToString("N0") + ")");
+                    reasons.Add("Strong mid-market budget (" + CurrencyHelper.FormatINRRounded(lead.Budget.Value) + ")");
                 }
                 else if (lead.Budget.Value >= 20000m)
                 {
                     score += 8;
-                    reasons.Add("Standard budget allocation ($" + lead.Budget.Value.ToString("N0") + ")");
+                    reasons.Add("Standard budget allocation (" + CurrencyHelper.FormatINRRounded(lead.Budget.Value) + ")");
                 }
                 else
                 {
                     score -= 5;
-                    reasons.Add("Lower budget bracket (<$20,000)");
+                    reasons.Add("Lower budget bracket (<" + CurrencyHelper.FormatINRRounded(20000m) + ")");
                 }
             }
             else
@@ -172,7 +173,7 @@ namespace AI_Powered_CRM.AI
 
             // Summary
             string summary = $"{classification} priority lead ({lead.Name}) interested in {lead.InterestedProduct} from {lead.Source} source. " +
-                             $"Current status is {lead.Status} with a budget of {(lead.Budget.HasValue ? "$" + lead.Budget.Value.ToString("N0") : "unspecified")}. " +
+                             $"Current status is {lead.Status} with a budget of {(lead.Budget.HasValue ? CurrencyHelper.FormatINRRounded(lead.Budget.Value) : "unspecified")}. " +
                              $"Last touched {Math.Round(daysInactive)} days ago with {activityCount} total interactions logged.";
 
             // Next Best Action

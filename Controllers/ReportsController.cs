@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AI_Powered_CRM.Controllers
 {
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Policy = "TenantRequired")]
+    [Authorize(Roles = "Admin,Manager,CompanyAdmin")]
     public class ReportsController : Controller
     {
         private readonly IReportService _reportService;

@@ -64,4 +64,28 @@ namespace AI_Powered_CRM.Models.Enums
         High,
         Urgent
     }
+
+    public enum CompanyRole
+    {
+        CompanyAdmin,
+        Manager,
+        SalesExecutive
+    }
+
+    public enum SubscriptionTier
+    {
+        FreeTrial,
+        Starter,
+        Professional,
+        Enterprise
+    }
+
+    public enum SubscriptionStatus
+    {
+        Trialing,
+        Active,
+        PastDue,
+        Canceled,
+        Expired
+    }
 }

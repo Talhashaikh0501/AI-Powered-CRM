@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AI_Powered_CRM.Controllers
 {
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
     public class FollowUpsController : Controller
     {
         private readonly IFollowUpService         _followUpService;

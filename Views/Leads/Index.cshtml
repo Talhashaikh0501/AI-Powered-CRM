@@ -120,7 +120,7 @@
                             <td>
                                 <div class="fw-semibold text-truncate" style="max-width: 180px;">@lead.InterestedProduct</div>
                                 <small class="text-success fw-semibold">
-                                    @(lead.Budget.HasValue ? "$" + lead.Budget.Value.ToString("N0") : "Budget Unset")
+                                    @(lead.Budget.HasValue ? AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(lead.Budget.Value) : "Budget Unset")
                                 </small>
                             </td>
                             <td>

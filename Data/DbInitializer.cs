@@ -16,11 +16,12 @@ namespace AI_Powered_CRM.Data
         {
             using var scope = serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            context.IgnoreTenantFilter = true;
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
             // 1. Ensure Roles Exist
-            string[] roles = new[] { "Admin", "Manager", "SalesExecutive" };
+            string[] roles = new[] { "PlatformSuperAdmin", "CompanyAdmin", "Admin", "Manager", "SalesExecutive" };
             foreach (var role in roles)
             {
                 if (!await roleManager.RoleExistsAsync(role))
@@ -29,22 +30,68 @@ namespace AI_Powered_CRM.Data
                 }
             }
 
-            // 2. Ensure Default Users Exist
-            // Admin is always seeded (first-run bootstrap).
-            // Demo accounts (manager, sales) are ONLY seeded in Development.
-            var adminUser = await EnsureUserAsync(
-                userManager,
-                "admin@crm.local",
-                "Talha Shaikh (Admin)",
-                "Admin@123",
-                "Admin"
-            );
+            // 2. Ensure Primary Default Tenant Exists (Config-driven)
+            var config = scope.ServiceProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+            var defaultTenantId = Guid.TryParse(config?["PrimaryTenant:TenantId"], out var parsedId) 
+                ? parsedId 
+                : Guid.Parse("11111111-1111-1111-1111-111111111111");
+            var companyName = config?["PrimaryTenant:CompanyName"] ?? "AI Powered CRM Enterprise";
+            var slug = config?["PrimaryTenant:Slug"] ?? "primary-tenant";
+            var contactEmail = config?["PrimaryTenant:ContactEmail"] ?? "compliance@aipoweredcrm.com";
+            var phone = config?["PrimaryTenant:Phone"] ?? "+91-22-61234567";
+            var currency = config?["PrimaryTenant:DefaultCurrency"] ?? "INR";
 
+            var defaultTenant = await context.Tenants.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TenantId == defaultTenantId);
+            if (defaultTenant == null)
+            {
+                defaultTenant = new Tenant
+                {
+                    TenantId = defaultTenantId,
+                    CompanyName = companyName,
+                    Slug = slug,
+                    ContactEmail = contactEmail,
+                    Phone = phone,
+                    DefaultCurrency = currency,
+                    SubscriptionTier = SubscriptionTier.Enterprise,
+                    SubscriptionStatus = SubscriptionStatus.Active,
+                    MaxUserSeats = 100,
+                    MaxLeadsQuota = 50000,
+                    MonthlyAiRequestLimit = 5000,
+                    IsActive = true
+                };
+                context.Tenants.Add(defaultTenant);
+
+                var settings = new TenantSetting
+                {
+                    TenantId = defaultTenantId,
+                    CurrencyCode = currency,
+                    CurrencySymbol = "₹",
+                    DateFormat = "dd/MM/yyyy",
+                    TimeZoneId = "India Standard Time",
+                    FiscalYearStartMonth = 4,
+                    LeadAssignmentMode = "Manual",
+                    RestrictLeadExport = true
+                };
+                context.TenantSettings.Add(settings);
+                await context.SaveChangesAsync();
+            }
+
+            // 3. User Accounts Seeding
+            ApplicationUser? adminUser = null;
             ApplicationUser? managerUser = null;
             ApplicationUser? salesUser   = null;
 
             if (isDevelopment)
             {
+                // In Development: seed demo developer accounts if they don't already exist
+                adminUser = await EnsureUserAsync(
+                    userManager,
+                    "admin@crm.local",
+                    "Talha Shaikh (Admin)",
+                    "Admin@123",
+                    "Admin"
+                );
+
                 managerUser = await EnsureUserAsync(
                     userManager,
                     "manager@crm.local",
@@ -60,6 +107,36 @@ namespace AI_Powered_CRM.Data
                     "Sales@123",
                     "SalesExecutive"
                 );
+
+                await EnsureMembershipAsync(context, defaultTenantId, adminUser.Id, CompanyRole.CompanyAdmin);
+                await EnsureMembershipAsync(context, defaultTenantId, managerUser.Id, CompanyRole.Manager);
+                await EnsureMembershipAsync(context, defaultTenantId, salesUser.Id, CompanyRole.SalesExecutive);
+            }
+            else
+            {
+                // In Production: NEVER seed hardcoded demo credentials.
+                // Secure first-run administrator bootstrap mechanism via configuration / environment variables.
+                var configuration = scope.ServiceProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+                var existingAdmins = await userManager.GetUsersInRoleAsync("Admin");
+                if (existingAdmins.Count == 0 && configuration != null)
+                {
+                    var bootstrapEmail = configuration["Security:AdminBootstrap:Email"] 
+                                      ?? Environment.GetEnvironmentVariable("CRM_BOOTSTRAP_ADMIN_EMAIL");
+                    var bootstrapPass  = configuration["Security:AdminBootstrap:Password"] 
+                                      ?? Environment.GetEnvironmentVariable("CRM_BOOTSTRAP_ADMIN_PASSWORD");
+                    var bootstrapName  = configuration["Security:AdminBootstrap:FullName"] ?? "System Administrator";
+
+                    if (!string.IsNullOrWhiteSpace(bootstrapEmail) && !string.IsNullOrWhiteSpace(bootstrapPass))
+                    {
+                        adminUser = await EnsureUserAsync(
+                            userManager,
+                            bootstrapEmail.Trim(),
+                            bootstrapName.Trim(),
+                            bootstrapPass,
+                            "Admin"
+                        );
+                    }
+                }
             }
 
             // 3. Seed Realistic Sample Leads if none exist (Development only)
@@ -292,7 +369,7 @@ namespace AI_Powered_CRM.Data
                 context.AuditLogs.Add(
                     new AuditLog
                     {
-                        UserId = adminUser.Id,
+                        UserId = adminUser?.Id,
                         EntityType = "Lead",
                         EntityId = leadAhmed.LeadId.ToString(),
                         Action = "Created",
@@ -338,6 +415,31 @@ namespace AI_Powered_CRM.Data
             }
 
             return user;
+        }
+
+        private static async Task EnsureMembershipAsync(
+            ApplicationDbContext context,
+            Guid tenantId,
+            string userId,
+            CompanyRole role)
+        {
+            var exists = await context.TenantMemberships
+                .IgnoreQueryFilters()
+                .AnyAsync(m => m.TenantId == tenantId && m.UserId == userId);
+
+            if (!exists)
+            {
+                context.TenantMemberships.Add(new TenantMembership
+                {
+                    MembershipId = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    UserId = userId,
+                    CompanyRole = role,
+                    IsActive = true,
+                    JoinedAt = DateTime.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
         }
     }
 }

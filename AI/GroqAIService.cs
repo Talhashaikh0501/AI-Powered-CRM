@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AI_Powered_CRM.DTOs;
+using AI_Powered_CRM.Helpers;
 using AI_Powered_CRM.Models.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -19,23 +20,53 @@ namespace AI_Powered_CRM.AI
         private readonly IConfiguration _configuration;
         private readonly IDeterministicFallbackScorer _fallbackScorer;
         private readonly ILogger<GroqAIService> _logger;
+        private readonly Services.Interfaces.ISubscriptionQuotaService? _quotaService;
+        private readonly Security.ITenantContext? _tenantContext;
 
         public GroqAIService(
             HttpClient httpClient,
             IConfiguration configuration,
             IDeterministicFallbackScorer fallbackScorer,
-            ILogger<GroqAIService> logger)
+            ILogger<GroqAIService> logger,
+            Services.Interfaces.ISubscriptionQuotaService? quotaService = null,
+            Security.ITenantContext? tenantContext = null)
         {
             _httpClient = httpClient;
             _configuration = configuration;
             _fallbackScorer = fallbackScorer;
             _logger = logger;
+            _quotaService = quotaService;
+            _tenantContext = tenantContext;
 
             _httpClient.Timeout = TimeSpan.FromSeconds(10);
         }
 
         public async Task<AILeadAnalysisResult> AnalyzeLeadAsync(Lead lead, List<LeadActivity> activities, List<FollowUp> followUps)
         {
+            if (_tenantContext != null && _tenantContext.IsResolved && !_tenantContext.IsPlatformSuperAdmin)
+            {
+                if (lead.TenantId != Guid.Empty && lead.TenantId != _tenantContext.CurrentTenantId)
+                {
+                    throw new System.Security.SecurityException(
+                        $"Cross-tenant AI inference rejected: Lead belongs to tenant {lead.TenantId}, but active tenant context is {_tenantContext.CurrentTenantId}.");
+                }
+
+                if (lead.TenantId == Guid.Empty)
+                {
+                    lead.TenantId = _tenantContext.CurrentTenantId;
+                }
+            }
+
+            if (_quotaService != null && lead.TenantId != Guid.Empty)
+            {
+                var canExecute = await _quotaService.CanExecuteAiInferenceAsync(lead.TenantId);
+                if (!canExecute)
+                {
+                    _logger.LogWarning("Monthly AI request limit exceeded for tenant {TenantId}. Falling back to deterministic scorer.", lead.TenantId);
+                    return _fallbackScorer.CalculateDeterministicScore(lead, activities, followUps);
+                }
+            }
+
             var apiKey = GetApiKey();
             var model = _configuration["AI:Model"] ?? "openai/gpt-oss-20b";
             var endpoint = _configuration["AI:Endpoint"] ?? "https://api.groq.com/openai/v1/chat/completions";
@@ -83,8 +114,7 @@ Do NOT invent fake facts. Base your analysis purely on the lead details and acti
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    var errBody = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning("AI API returned {StatusCode}: {Error}. Falling back to deterministic rules.", response.StatusCode, errBody);
+                    _logger.LogWarning("AI API returned status code {StatusCode}. Falling back to deterministic rules.", response.StatusCode);
                     return _fallbackScorer.CalculateDeterministicScore(lead, activities, followUps);
                 }
 
@@ -119,6 +149,11 @@ Do NOT invent fake facts. Base your analysis purely on the lead details and acti
                 result.IsFallback = false;
                 result.GeneratedAt = DateTime.UtcNow;
 
+                if (_quotaService != null && lead.TenantId != Guid.Empty)
+                {
+                    await _quotaService.RecordAiUsageAsync(lead.TenantId);
+                }
+
                 return result;
             }
             catch (Exception ex)
@@ -130,6 +165,15 @@ Do NOT invent fake facts. Base your analysis purely on the lead details and acti
 
         public async Task<string> GenerateDraftResponseAsync(Lead lead, List<LeadActivity> activities, string? userTone, string? customInstructions)
         {
+            if (_tenantContext != null && _tenantContext.IsResolved && !_tenantContext.IsPlatformSuperAdmin)
+            {
+                if (lead.TenantId != Guid.Empty && lead.TenantId != _tenantContext.CurrentTenantId)
+                {
+                    throw new System.Security.SecurityException(
+                        $"Cross-tenant AI draft rejected: Lead belongs to tenant {lead.TenantId}, but active tenant context is {_tenantContext.CurrentTenantId}.");
+                }
+            }
+
             var apiKey = GetApiKey();
             var model = _configuration["AI:Model"] ?? "openai/gpt-oss-20b";
             var endpoint = _configuration["AI:Endpoint"] ?? "https://api.groq.com/openai/v1/chat/completions";
@@ -141,7 +185,14 @@ Do NOT invent fake facts. Base your analysis purely on the lead details and acti
 
             try
             {
-                var systemPrompt = $"You are an expert sales communications copywriter. Tone: {userTone ?? "Professional, warm and persuasive"}. Additional instructions: {customInstructions ?? "Keep it concise and end with a clear, low-friction call to action."}";
+                var safeTone = !string.IsNullOrWhiteSpace(userTone) 
+                    ? SanitizePromptInput(userTone, 100) 
+                    : "Professional, warm and persuasive";
+                var safeInstructions = !string.IsNullOrWhiteSpace(customInstructions) 
+                    ? SanitizePromptInput(customInstructions, 200) 
+                    : "Keep it concise and end with a clear, low-friction call to action.";
+
+                var systemPrompt = $"You are an expert sales communications copywriter. Tone: {safeTone}. Additional instructions: {safeInstructions}";
                 var userPrompt = $"Write a personalized follow-up message to client '{lead.Name}' from company '{lead.Company ?? "Individual"}' who is interested in '{lead.InterestedProduct}'. Recent activity summary: {string.Join(" | ", activities.Take(3).Select(a => $"{a.Type}: {a.Description}"))}";
 
                 var payload = new
@@ -184,11 +235,11 @@ Do NOT invent fake facts. Base your analysis purely on the lead details and acti
 
             var fallback = new ManagerPipelineSummaryDto
             {
-                ObservationSummary = $"Pipeline health is solid with {dashboardData.TotalActiveLeads} active deals totaling ${dashboardData.TotalPipelineValue:N0} in active pipeline value. Win rate currently sits at {dashboardData.WinRatePercentage:F1}%.",
+                ObservationSummary = $"Pipeline health is solid with {dashboardData.TotalActiveLeads} active deals totaling {CurrencyHelper.FormatINRRounded(dashboardData.TotalPipelineValue)} in active pipeline value. Win rate currently sits at {dashboardData.WinRatePercentage:F1}%.",
                 UrgentAttentionItems = dashboardData.FollowUpsOverdueCount > 0
                     ? $"{dashboardData.FollowUpsOverdueCount} follow-ups are overdue and require immediate rep follow-up."
                     : "No overdue follow-ups detected. Sales reps are maintaining active momentum.",
-                RevenueOpportunityForecast = $"With {dashboardData.HotLeadsCount} high-probability hot deals, projected near-term closings represent an estimated ${dashboardData.TotalPipelineValue * 0.45m:N0} in conversion potential.",
+                RevenueOpportunityForecast = $"With {dashboardData.HotLeadsCount} high-probability hot deals, projected near-term closings represent an estimated {CurrencyHelper.FormatINRRounded(dashboardData.TotalPipelineValue * 0.45m)} in conversion potential.",
                 GeneratedAt = DateTime.UtcNow.ToString("g")
             };
 
@@ -199,8 +250,8 @@ Do NOT invent fake facts. Base your analysis purely on the lead details and acti
                 var prompt = $@"Given these CRM metrics:
 - Active Leads: {dashboardData.TotalActiveLeads}
 - Hot Leads: {dashboardData.HotLeadsCount}
-- Pipeline Value: ${dashboardData.TotalPipelineValue:N0}
-- Converted Revenue: ${dashboardData.ConvertedRevenue:N0}
+- Pipeline Value: {CurrencyHelper.FormatINRRounded(dashboardData.TotalPipelineValue)}
+- Won Deal Value (Est.): {CurrencyHelper.FormatINRRounded(dashboardData.EstimatedConvertedValue)}
 - Win Rate: {dashboardData.WinRatePercentage:F1}%
 - Overdue Follow-ups: {dashboardData.FollowUpsOverdueCount}
 
@@ -264,11 +315,11 @@ Provide an executive sales summary in valid JSON format:
         {
             var sb = new StringBuilder();
             sb.AppendLine($"LEAD DETAILS:");
-            sb.AppendLine($"- Name: {lead.Name}");
-            sb.AppendLine($"- Company: {lead.Company ?? "Individual"}");
-            sb.AppendLine($"- Source: {lead.Source}");
-            sb.AppendLine($"- Interested Product: {lead.InterestedProduct}");
-            sb.AppendLine($"- Budget: {(lead.Budget.HasValue ? "$" + lead.Budget.Value.ToString("N0") : "Not specified")}");
+            sb.AppendLine($"- Name: {SanitizePromptInput(lead.Name, 100)}");
+            sb.AppendLine($"- Company: {SanitizePromptInput(lead.Company ?? "Individual", 100)}");
+            sb.AppendLine($"- Source: {SanitizePromptInput(lead.Source, 50)}");
+            sb.AppendLine($"- Interested Product: {SanitizePromptInput(lead.InterestedProduct, 200)}");
+            sb.AppendLine($"- Budget: {(lead.Budget.HasValue ? CurrencyHelper.FormatINR(lead.Budget.Value) : "Not specified")}");
             sb.AppendLine($"- Current Status: {lead.Status}");
             sb.AppendLine($"- Priority: {lead.Priority}");
             sb.AppendLine($"- Created Date: {lead.CreatedAt:yyyy-MM-dd}");
@@ -278,7 +329,7 @@ Provide an executive sales summary in valid JSON format:
             {
                 foreach (var a in activities.OrderByDescending(x => x.OccurredAt).Take(5))
                 {
-                    sb.AppendLine($"- [{a.OccurredAt:yyyy-MM-dd}] {a.Type}: {a.Description}");
+                    sb.AppendLine($"- [{a.OccurredAt:yyyy-MM-dd}] {a.Type}: {SanitizePromptInput(a.Description, 200)}");
                 }
             }
             else
@@ -291,7 +342,7 @@ Provide an executive sales summary in valid JSON format:
             {
                 foreach (var f in followUps.OrderBy(x => x.DueAt).Take(4))
                 {
-                    sb.AppendLine($"- [{f.DueAt:yyyy-MM-dd}] {f.Type} (Status: {f.Status}) - {f.Notes}");
+                    sb.AppendLine($"- [{f.DueAt:yyyy-MM-dd}] {f.Type} (Status: {f.Status}) - {SanitizePromptInput(f.Notes, 200)}");
                 }
             }
             else
@@ -322,6 +373,26 @@ Provide an executive sales summary in valid JSON format:
             if (string.Equals(val, "Urgent", StringComparison.OrdinalIgnoreCase)) return "Urgent";
             if (string.Equals(val, "High", StringComparison.OrdinalIgnoreCase)) return "High";
             return "Normal";
+        }
+
+        private static string SanitizePromptInput(string? input, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+            var trimmed = input.Trim();
+            if (trimmed.Length > maxLength) trimmed = trimmed.Substring(0, maxLength);
+            // Remove prompt injection markers and control delimiters
+            trimmed = trimmed
+                .Replace("```", "")
+                .Replace("###", "")
+                .Replace("<system>", "")
+                .Replace("</system>", "")
+                .Replace("<|im_start|>", "")
+                .Replace("<|im_end|>", "")
+                .Replace("[INST]", "")
+                .Replace("[/INST]", "")
+                .Replace("<script>", "")
+                .Replace("</script>", "");
+            return trimmed;
         }
     }
 }

@@ -9,6 +9,11 @@ namespace AI_Powered_CRM.Models.Entities
         [Key]
         public long AuditLogId { get; set; }
 
+        public Guid? TenantId { get; set; }
+
+        [ForeignKey(nameof(TenantId))]
+        public virtual Tenant? Tenant { get; set; }
+
         [MaxLength(450)]
         public string? UserId { get; set; }
 

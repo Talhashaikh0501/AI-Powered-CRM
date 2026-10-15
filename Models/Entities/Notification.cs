@@ -1,13 +1,20 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using AI_Powered_CRM.Models.Interfaces;
 
 namespace AI_Powered_CRM.Models.Entities
 {
-    public class Notification
+    public class Notification : ITenantEntity
     {
         [Key]
         public int NotificationId { get; set; }
+
+        [Required]
+        public Guid TenantId { get; set; }
+
+        [ForeignKey(nameof(TenantId))]
+        public virtual Tenant? Tenant { get; set; }
 
         [Required]
         [MaxLength(450)]

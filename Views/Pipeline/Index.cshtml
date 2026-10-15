@@ -13,7 +13,7 @@
     <div class="d-flex align-items-center gap-3">
         <div class="crm-card px-3 py-2 d-flex align-items-center gap-2">
             <span class="text-muted small">Active Pipeline:</span>
-            <span class="fw-bold text-success fs-6">$@Model.TotalActivePipelineValue.ToString("N0")</span>
+            <span class="fw-bold text-success fs-6">@AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(Model.TotalActivePipelineValue)</span>
             <span class="badge bg-light text-dark border">@Model.TotalActiveDealsCount Deals</span>
         </div>
         <a asp-controller="Leads" asp-action="Create" class="btn btn-primary btn-sm d-flex align-items-center gap-1 shadow-sm">
@@ -41,7 +41,7 @@
                 <div>
                     <span class="fw-bold small text-dark d-block">@stage.Key</span>
                     <span class="text-success text-xs fw-semibold" style="font-size: 0.72rem;">
-                        $@stageVal.ToString("N0")
+                        @AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(stageVal)
                     </span>
                 </div>
                 <span class="badge @(isWon ? "bg-success" : (isLost ? "bg-danger" : "bg-secondary")) rounded-pill">
@@ -64,7 +64,7 @@
                                 @aiClass (@score)
                             </span>
                             <span class="fw-bold text-success small">
-                                @(lead.Budget.HasValue ? "$" + lead.Budget.Value.ToString("N0") : "No budget")
+                                @(lead.Budget.HasValue ? AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(lead.Budget.Value) : "No budget")
                             </span>
                         </div>
 

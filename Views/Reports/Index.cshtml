@@ -23,15 +23,15 @@
     </div>
     <div class="col-lg-3 col-sm-6">
         <div class="crm-card p-3">
-            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Won Revenue</div>
-            <div class="fs-3 fw-bold text-success">$@Model.ConversionReport.TotalWonRevenue.ToString("N0")</div>
-            <div class="small text-muted">Closed deal value</div>
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Won Deal Value (Est.)</div>
+            <div class="fs-3 fw-bold text-success">@AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(Model.ConversionReport.TotalWonDealValue)</div>
+            <div class="small text-muted">Closed deal budget value (estimated)</div>
         </div>
     </div>
     <div class="col-lg-3 col-sm-6">
         <div class="crm-card p-3">
             <div class="small fw-semibold text-muted text-uppercase mb-1">Average Deal Size</div>
-            <div class="fs-3 fw-bold text-primary">$@Model.ConversionReport.AverageDealSize.ToString("N0")</div>
+            <div class="fs-3 fw-bold text-primary">@AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(Model.ConversionReport.AverageDealSize)</div>
             <div class="small text-muted">Per converted customer</div>
         </div>
     </div>
@@ -55,7 +55,7 @@
                     <th>Total Leads</th>
                     <th>Deals Converted</th>
                     <th>Conversion Rate</th>
-                    <th class="text-end">Revenue Realized</th>
+                    <th class="text-end">Won Deal Value (Est.)</th>
                 </tr>
             </thead>
             <tbody>
@@ -73,7 +73,7 @@
                                 <span class="small fw-semibold">@s.ConversionRate%</span>
                             </div>
                         </td>
-                        <td class="text-end fw-bold text-success">$@s.TotalRevenue.ToString("N0")</td>
+                        <td class="text-end fw-bold text-success">@AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(s.EstimatedWonValue)</td>
                     </tr>
                 }
             </tbody>
@@ -93,7 +93,7 @@
                     <th>Completed Follow-Ups</th>
                     <th>Deals Won</th>
                     <th>Win Rate %</th>
-                    <th class="text-end">Closed Revenue</th>
+                    <th class="text-end">Closed Deal Value (Est.)</th>
                 </tr>
             </thead>
             <tbody>
@@ -112,7 +112,7 @@
                         <td><span class="badge bg-light text-dark border">@rep.CompletedFollowUpsCount Completed</span></td>
                         <td><span class="badge bg-success">@rep.ConvertedLeadsCount Won</span></td>
                         <td><span class="fw-semibold text-dark">@rep.ConversionRate%</span></td>
-                        <td class="text-end fw-bold text-success fs-6">$@rep.ClosedRevenue.ToString("N0")</td>
+                        <td class="text-end fw-bold text-success fs-6">@AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(rep.ClosedRevenue)</td>
                     </tr>
                 }
             </tbody>

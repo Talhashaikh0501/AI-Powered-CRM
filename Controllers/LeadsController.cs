@@ -19,7 +19,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AI_Powered_CRM.Controllers
 {
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
     public class LeadsController : Controller
     {
         private readonly ILeadService                        _leadService;
@@ -50,7 +50,8 @@ namespace AI_Powered_CRM.Controllers
                                         ?? throw new InvalidOperationException("User not authenticated.");
         private string GetUserRole() => User.IsInRole("Admin")   ? "Admin"
                                       : User.IsInRole("Manager") ? "Manager"
-                                                                  : "SalesExecutive";
+                                      : User.IsInRole("SalesExecutive") ? "SalesExecutive"
+                                      : "Unknown";
 
         // -----------------------------------------------------------------------
         // GET: /Leads
@@ -183,7 +184,7 @@ namespace AI_Powered_CRM.Controllers
                 OwnerUserId       = ownerUserId
             };
 
-            var lead = await _leadService.CreateLeadAsync(dto, currentUserId);
+            var lead = await _leadService.CreateLeadAsync(dto, currentUserId, currentRole);
             TempData["SuccessMessage"] = $"Lead '{lead.Name}' successfully created!";
             return RedirectToAction(nameof(Details), new { id = lead.LeadId });
         }

@@ -12,7 +12,19 @@ namespace AI_Powered_CRM.DTOs
         public int ConvertedCount { get; set; }
         public int LostCount { get; set; }
         public decimal TotalPipelineValue { get; set; }
-        public decimal ConvertedRevenue { get; set; }
+
+        /// <summary>
+        /// Total estimated deal budget of converted leads. Note: Converted lead budgets represent estimated won deal value, not realized accounting revenue.
+        /// </summary>
+        public decimal EstimatedConvertedValue { get; set; }
+
+        // Backward compatibility alias
+        public decimal ConvertedRevenue
+        {
+            get => EstimatedConvertedValue;
+            set => EstimatedConvertedValue = value;
+        }
+
         public double WinRatePercentage { get; set; }
 
         public int FollowUpsDueTodayCount { get; set; }
@@ -34,7 +46,19 @@ namespace AI_Powered_CRM.DTOs
         public int ConvertedLeads { get; set; }
         public int LostLeads { get; set; }
         public double ConversionRate { get; set; }
-        public decimal TotalWonRevenue { get; set; }
+
+        /// <summary>
+        /// Total estimated deal value of won/converted leads. Note: Lead budgets represent conversion estimates, not realized accounting revenue.
+        /// </summary>
+        public decimal TotalWonDealValue { get; set; }
+
+        // Backward compatibility alias
+        public decimal TotalWonRevenue
+        {
+            get => TotalWonDealValue;
+            set => TotalWonDealValue = value;
+        }
+
         public decimal AverageDealSize { get; set; }
         public Dictionary<string, int> StageDropoffs { get; set; } = new Dictionary<string, int>();
     }
@@ -45,7 +69,17 @@ namespace AI_Powered_CRM.DTOs
         public int LeadCount { get; set; }
         public int ConvertedCount { get; set; }
         public double ConversionRate { get; set; }
-        public decimal TotalRevenue { get; set; }
+
+        /// <summary>
+        /// Estimated deal value from converted leads for this acquisition source.
+        /// </summary>
+        public decimal EstimatedWonValue { get; set; }
+
+        public decimal TotalRevenue
+        {
+            get => EstimatedWonValue;
+            set => EstimatedWonValue = value;
+        }
     }
 
     public class StaffPerformanceDto
@@ -56,6 +90,16 @@ namespace AI_Powered_CRM.DTOs
         public int CompletedFollowUpsCount { get; set; }
         public int ConvertedLeadsCount { get; set; }
         public double ConversionRate { get; set; }
-        public decimal ClosedRevenue { get; set; }
+
+        /// <summary>
+        /// Total estimated deal value of converted leads owned by this representative.
+        /// </summary>
+        public decimal ClosedWonDealValue { get; set; }
+
+        public decimal ClosedRevenue
+        {
+            get => ClosedWonDealValue;
+            set => ClosedWonDealValue = value;
+        }
     }
 }

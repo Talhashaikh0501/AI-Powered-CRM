@@ -51,9 +51,13 @@ namespace AI_Powered_CRM.Services.Implementations
                 .Include(l => l.AIInsights)
                 .Where(l => !l.IsArchived);
 
-            // Scope based on role
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
+            // Scope based on role - denied by default for unknown/non-elevated roles
+            if (role != "Admin" && role != "Manager")
             {
+                if (string.IsNullOrEmpty(currentUserId))
+                {
+                    return (new List<Lead>(), 0);
+                }
                 query = query.Where(l => l.OwnerUserId == currentUserId);
             }
 
@@ -113,17 +117,41 @@ namespace AI_Powered_CRM.Services.Implementations
 
             if (lead == null) return null;
 
-            // Role scope check
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId) && lead.OwnerUserId != currentUserId)
+            // Role scope check - denied by default for non-admin/manager
+            if (role != "Admin" && role != "Manager")
             {
-                return null; // Forbidden
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                {
+                    return null; // Forbidden
+                }
             }
 
             return lead;
         }
 
-        public async Task<Lead> CreateLeadAsync(CreateLeadDto dto, string currentUserId)
+        public async Task<Lead> CreateLeadAsync(CreateLeadDto dto, string currentUserId, string? role = null)
         {
+            string ownerUserId;
+            if (role == "Admin" || role == "Manager")
+            {
+                if (!string.IsNullOrWhiteSpace(dto.OwnerUserId))
+                {
+                    var targetUser = await _context.Users
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Id == dto.OwnerUserId && u.IsActive);
+                    ownerUserId = targetUser != null ? targetUser.Id : currentUserId;
+                }
+                else
+                {
+                    ownerUserId = currentUserId;
+                }
+            }
+            else
+            {
+                // SalesExecutive or unknown role can ONLY create lead assigned to self
+                ownerUserId = currentUserId;
+            }
+
             var lead = new Lead
             {
                 Name = dto.Name.Trim(),
@@ -135,7 +163,7 @@ namespace AI_Powered_CRM.Services.Implementations
                 Budget = dto.Budget,
                 Status = dto.Status,
                 Priority = dto.Priority,
-                OwnerUserId = !string.IsNullOrEmpty(dto.OwnerUserId) ? dto.OwnerUserId : currentUserId,
+                OwnerUserId = ownerUserId,
                 IsArchived = false,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -187,9 +215,12 @@ namespace AI_Powered_CRM.Services.Implementations
             var lead = await _context.Leads.FirstOrDefaultAsync(l => l.LeadId == dto.LeadId && !l.IsArchived);
             if (lead == null) return false;
 
-            if (role == "SalesExecutive" && lead.OwnerUserId != currentUserId)
+            if (role != "Admin" && role != "Manager")
             {
-                return false;
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                {
+                    return false;
+                }
             }
 
             lead.Name = dto.Name.Trim();
@@ -202,10 +233,18 @@ namespace AI_Powered_CRM.Services.Implementations
             lead.Priority = dto.Priority;
             lead.UpdatedAt = DateTime.UtcNow;
 
+            // Only Admin or Manager can reassign owner during update, and target user must be active
             if (role == "Admin" || role == "Manager")
             {
                 if (!string.IsNullOrEmpty(dto.OwnerUserId) && lead.OwnerUserId != dto.OwnerUserId)
                 {
+                    var targetUser = await _context.Users
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Id == dto.OwnerUserId && u.IsActive);
+                    if (targetUser == null)
+                    {
+                        return false; // Reject assignment to invalid or inactive target
+                    }
                     lead.OwnerUserId = dto.OwnerUserId;
                 }
             }
@@ -220,9 +259,12 @@ namespace AI_Powered_CRM.Services.Implementations
             var lead = await _context.Leads.FirstOrDefaultAsync(l => l.LeadId == leadId && !l.IsArchived);
             if (lead == null) return false;
 
-            if (role == "SalesExecutive" && lead.OwnerUserId != currentUserId)
+            if (role != "Admin" && role != "Manager")
             {
-                return false;
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                {
+                    return false;
+                }
             }
 
             if (lead.Status == newStatus) return true;
@@ -260,6 +302,15 @@ namespace AI_Powered_CRM.Services.Implementations
         {
             if (role != "Admin" && role != "Manager")
             {
+                return false;
+            }
+
+            var targetUser = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == newOwnerId && u.IsActive);
+            if (targetUser == null)
+            {
+                _logger.LogWarning("Reassignment target user {NewOwnerId} does not exist or is inactive.", newOwnerId);
                 return false;
             }
 
@@ -319,9 +370,12 @@ namespace AI_Powered_CRM.Services.Implementations
 
             if (lead == null) return null;
 
-            if (role == "SalesExecutive" && lead.OwnerUserId != currentUserId)
+            if (role != "Admin" && role != "Manager")
             {
-                return null;
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                {
+                    return null;
+                }
             }
 
             var result = await _aiService.AnalyzeLeadAsync(
@@ -367,8 +421,12 @@ namespace AI_Powered_CRM.Services.Implementations
                 .Include(l => l.AIInsights)
                 .Where(l => !l.IsArchived);
 
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
+            if (role != "Admin" && role != "Manager")
             {
+                if (string.IsNullOrEmpty(currentUserId))
+                {
+                    return new Dictionary<LeadStatus, List<Lead>>();
+                }
                 query = query.Where(l => l.OwnerUserId == currentUserId);
             }
 

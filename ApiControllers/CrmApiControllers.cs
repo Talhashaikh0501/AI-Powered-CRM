@@ -8,6 +8,7 @@ using AI_Powered_CRM.Security;
 using AI_Powered_CRM.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AI_Powered_CRM.ApiControllers
 {
@@ -16,7 +17,8 @@ namespace AI_Powered_CRM.ApiControllers
     // =========================================================================
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
+    [EnableRateLimiting("api")]
     public class LeadsController : ControllerBase
     {
         private readonly ILeadService         _leadService;
@@ -40,7 +42,8 @@ namespace AI_Powered_CRM.ApiControllers
                                         ?? throw new InvalidOperationException("Not authenticated.");
         private string GetUserRole() => User.IsInRole("Admin")   ? "Admin"
                                       : User.IsInRole("Manager") ? "Manager"
-                                                                  : "SalesExecutive";
+                                      : User.IsInRole("SalesExecutive") ? "SalesExecutive"
+                                      : "Unknown";
 
         // GET /api/v1/leads
         [HttpGet]
@@ -79,7 +82,7 @@ namespace AI_Powered_CRM.ApiControllers
             if (currentRole == "SalesExecutive")
                 dto.OwnerUserId = currentUserId;
 
-            var lead = await _leadService.CreateLeadAsync(dto, currentUserId);
+            var lead = await _leadService.CreateLeadAsync(dto, currentUserId, currentRole);
             return CreatedAtAction(nameof(GetLead), new { id = lead.LeadId },
                 new { leadId = lead.LeadId, status = lead.Status.ToString(), message = "Lead created." });
         }
@@ -180,7 +183,8 @@ namespace AI_Powered_CRM.ApiControllers
     // =========================================================================
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
+    [EnableRateLimiting("api")]
     public class FollowUpsController : ControllerBase
     {
         private readonly IFollowUpService     _followUpService;
@@ -198,7 +202,8 @@ namespace AI_Powered_CRM.ApiControllers
                                         ?? throw new InvalidOperationException("Not authenticated.");
         private string GetUserRole() => User.IsInRole("Admin")   ? "Admin"
                                       : User.IsInRole("Manager") ? "Manager"
-                                                                  : "SalesExecutive";
+                                      : User.IsInRole("SalesExecutive") ? "SalesExecutive"
+                                      : "Unknown";
 
         // GET /api/v1/followups
         [HttpGet]
@@ -248,7 +253,8 @@ namespace AI_Powered_CRM.ApiControllers
     // =========================================================================
     [ApiController]
     [Route("api/v1/ai")]
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
+    [EnableRateLimiting("api")]
     public class AiController : ControllerBase
     {
         private readonly ILeadService         _leadService;
@@ -269,7 +275,8 @@ namespace AI_Powered_CRM.ApiControllers
                                         ?? throw new InvalidOperationException("Not authenticated.");
         private string GetUserRole() => User.IsInRole("Admin")   ? "Admin"
                                       : User.IsInRole("Manager") ? "Manager"
-                                                                  : "SalesExecutive";
+                                      : User.IsInRole("SalesExecutive") ? "SalesExecutive"
+                                      : "Unknown";
 
         // POST /api/v1/ai/leads/{id}/analyze
         [HttpPost("leads/{id}/analyze")]
@@ -308,7 +315,8 @@ namespace AI_Powered_CRM.ApiControllers
     // =========================================================================
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
+    [EnableRateLimiting("api")]
     public class DashboardController : ControllerBase
     {
         private readonly IReportService _reportService;
@@ -318,7 +326,7 @@ namespace AI_Powered_CRM.ApiControllers
         public async Task<IActionResult> GetSummary()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var role   = User.IsInRole("Admin") ? "Admin" : User.IsInRole("Manager") ? "Manager" : "SalesExecutive";
+            var role   = User.IsInRole("Admin") ? "Admin" : User.IsInRole("Manager") ? "Manager" : User.IsInRole("SalesExecutive") ? "SalesExecutive" : "Unknown";
             return Ok(await _reportService.GetDashboardSummaryAsync(userId, role));
         }
     }
@@ -328,24 +336,25 @@ namespace AI_Powered_CRM.ApiControllers
     // =========================================================================
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
+    [EnableRateLimiting("api")]
     public class ReportsController : ControllerBase
     {
         private readonly IReportService _reportService;
         public ReportsController(IReportService reportService) => _reportService = reportService;
 
         [HttpGet("conversion")]
-        [Authorize(Roles = "Admin,Manager")]
+        [Authorize(Roles = "Admin,Manager,CompanyAdmin")]
         public async Task<IActionResult> GetConversion()
             => Ok(await _reportService.GetConversionReportAsync());
 
         [HttpGet("sources")]
-        [Authorize(Roles = "Admin,Manager")]
+        [Authorize(Roles = "Admin,Manager,CompanyAdmin")]
         public async Task<IActionResult> GetSources()
             => Ok(await _reportService.GetSourcePerformanceAsync());
 
         [HttpGet("staff")]
-        [Authorize(Roles = "Admin,Manager")]
+        [Authorize(Roles = "Admin,Manager,CompanyAdmin")]
         public async Task<IActionResult> GetStaff()
             => Ok(await _reportService.GetStaffPerformanceAsync());
     }
@@ -355,7 +364,8 @@ namespace AI_Powered_CRM.ApiControllers
     // =========================================================================
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
+    [EnableRateLimiting("api")]
     public class NotificationsController : ControllerBase
     {
         private readonly INotificationService _notificationService;

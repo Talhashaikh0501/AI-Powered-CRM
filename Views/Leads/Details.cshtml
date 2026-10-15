@@ -125,7 +125,7 @@
                 <div class="col-sm-6">
                     <div class="text-muted text-xs" style="font-size: 0.75rem;">Budget Allocation</div>
                     <div class="fw-bold text-success fs-6">
-                        @(Model.Lead.Budget.HasValue ? "$" + Model.Lead.Budget.Value.ToString("N0") : "Not Specified")
+                        @(Model.Lead.Budget.HasValue ? AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(Model.Lead.Budget.Value) : "Not Specified")
                     </div>
                 </div>
                 <div class="col-sm-6">
@@ -509,8 +509,17 @@
                 spinner.classList.remove('bi-spin');
 
                 if (data.success) {
-                    document.getElementById('textAiScore').innerHTML = data.score + '<span class="text-muted fs-6 fw-normal">/100</span>';
-                    document.getElementById('barAiScore').style.width = data.score + '%';
+                    const rawScore = Number(data.score);
+                    const safeScore = (Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 100) ? Math.round(rawScore) : 0;
+
+                    const scoreElem = document.getElementById('textAiScore');
+                    scoreElem.textContent = safeScore.toString();
+                    const scoreSpan = document.createElement('span');
+                    scoreSpan.className = 'text-muted fs-6 fw-normal';
+                    scoreSpan.textContent = '/100';
+                    scoreElem.appendChild(scoreSpan);
+
+                    document.getElementById('barAiScore').style.width = safeScore + '%';
                     document.getElementById('textAiClass').innerText = data.classification + ' Lead';
                     document.getElementById('textRisk').innerText = data.riskLevel + ' Risk';
                     document.getElementById('textUrgency').innerText = data.urgency;
@@ -522,18 +531,29 @@
                     document.getElementById('textAiModel').innerText = 'Model: ' + data.model + ' (' + data.provider + ')';
                     document.getElementById('textAiGeneratedAt').innerText = 'Evaluated: ' + data.generatedAt;
 
-                    // Update reasons
+                    // Update reasons safely without XSS vulnerability
+                    const factorsContainer = document.getElementById('factorsContainer');
+                    factorsContainer.textContent = '';
                     if (data.reasons && data.reasons.length > 0) {
-                        let html = '<ul class="list-unstyled mb-0 d-flex flex-column gap-2">';
+                        const ul = document.createElement('ul');
+                        ul.className = 'list-unstyled mb-0 d-flex flex-column gap-2';
                         data.reasons.forEach(r => {
                             const isNeg = r.includes('Warning') || r.includes('Urgent') || r.includes('Inactive') || r.includes('Zero');
-                            html += `<li class="small d-flex align-items-start gap-2">
-                                <i class="bi ${isNeg ? 'bi-exclamation-triangle-fill text-danger' : 'bi-check-circle-fill text-success'} mt-1"></i>
-                                <span class="${isNeg ? 'text-danger fw-semibold' : 'text-dark'}">${r}</span>
-                            </li>`;
+                            const li = document.createElement('li');
+                            li.className = 'small d-flex align-items-start gap-2';
+                            
+                            const icon = document.createElement('i');
+                            icon.className = 'bi ' + (isNeg ? 'bi-exclamation-triangle-fill text-danger' : 'bi-check-circle-fill text-success') + ' mt-1';
+                            
+                            const span = document.createElement('span');
+                            span.className = isNeg ? 'text-danger fw-semibold' : 'text-dark';
+                            span.textContent = r; // Safe textContent prevents script execution / XSS
+
+                            li.appendChild(icon);
+                            li.appendChild(span);
+                            ul.appendChild(li);
                         });
-                        html += '</ul>';
-                        document.getElementById('factorsContainer').innerHTML = html;
+                        factorsContainer.appendChild(ul);
                     }
                 } else {
                     alert('Could not run AI analysis: ' + data.message);

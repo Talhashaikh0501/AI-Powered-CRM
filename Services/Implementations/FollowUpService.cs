@@ -44,9 +44,12 @@ namespace AI_Powered_CRM.Services.Implementations
                 .Include(f => f.AssignedUser)
                 .Where(f => !f.Lead.IsArchived);
 
-            // SalesExecutive sees only their own follow-ups
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
+            if (role != "Admin" && role != "Manager")
+            {
+                if (string.IsNullOrEmpty(currentUserId))
+                    return new List<FollowUp>();
                 query = query.Where(f => f.AssignedUserId == currentUserId);
+            }
 
             if (status.HasValue)
                 query = query.Where(f => f.Status == status.Value);
@@ -65,8 +68,12 @@ namespace AI_Powered_CRM.Services.Implementations
                          && f.Status == FollowUpStatus.Pending
                          && f.DueAt < DateTime.UtcNow);
 
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
+            if (role != "Admin" && role != "Manager")
+            {
+                if (string.IsNullOrEmpty(currentUserId))
+                    return new List<FollowUp>();
                 query = query.Where(f => f.AssignedUserId == currentUserId);
+            }
 
             return await query.OrderBy(f => f.DueAt).ToListAsync();
         }
@@ -86,8 +93,12 @@ namespace AI_Powered_CRM.Services.Implementations
                          && f.DueAt >= startOfDay
                          && f.DueAt <= endOfDay);
 
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
+            if (role != "Admin" && role != "Manager")
+            {
+                if (string.IsNullOrEmpty(currentUserId))
+                    return new List<FollowUp>();
                 query = query.Where(f => f.AssignedUserId == currentUserId);
+            }
 
             return await query.OrderBy(f => f.DueAt).ToListAsync();
         }
@@ -108,29 +119,42 @@ namespace AI_Powered_CRM.Services.Implementations
             if (lead == null)
                 throw new InvalidOperationException("Lead not found or archived.");
 
-            // Ownership check for SalesExecutive
-            if (currentUserRole == "SalesExecutive" && lead.OwnerUserId != currentUserId)
+            // Ownership check for non-Admin/Manager
+            if (currentUserRole != "Admin" && currentUserRole != "Manager")
             {
-                _logger.LogWarning(
-                    "User {UserId} (SalesExecutive) tried to schedule follow-up on Lead {LeadId} they do not own.",
-                    currentUserId, dto.LeadId);
-                throw new UnauthorizedAccessException("You can only schedule follow-ups on leads you own.");
+                if (string.IsNullOrEmpty(currentUserId) || lead.OwnerUserId != currentUserId)
+                {
+                    _logger.LogWarning(
+                        "User {UserId} with role {Role} tried to schedule follow-up on Lead {LeadId} they do not own.",
+                        currentUserId, currentUserRole, dto.LeadId);
+                    throw new UnauthorizedAccessException("You can only schedule follow-ups on leads you own.");
+                }
             }
 
-            // Only Admin/Manager may reassign follow-up to another user
+            // Only Admin/Manager may assign follow-up to another user, and target user must be valid and active
             string assignedTo;
-            if (!string.IsNullOrEmpty(dto.AssignedUserId)
-                && dto.AssignedUserId != currentUserId
-                && currentUserRole == "SalesExecutive")
+            if (currentUserRole == "Admin" || currentUserRole == "Manager")
             {
-                // SalesExecutive cannot assign to someone else – default to self
-                assignedTo = currentUserId;
+                if (!string.IsNullOrEmpty(dto.AssignedUserId))
+                {
+                    var targetUser = await _context.Users
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Id == dto.AssignedUserId && u.IsActive);
+                    if (targetUser == null)
+                    {
+                        throw new InvalidOperationException("Target user does not exist or is inactive.");
+                    }
+                    assignedTo = dto.AssignedUserId;
+                }
+                else
+                {
+                    assignedTo = lead.OwnerUserId ?? currentUserId;
+                }
             }
             else
             {
-                assignedTo = !string.IsNullOrEmpty(dto.AssignedUserId)
-                    ? dto.AssignedUserId
-                    : lead.OwnerUserId ?? currentUserId;
+                // SalesExecutive or non-elevated roles can only schedule for themselves
+                assignedTo = currentUserId;
             }
 
             var followUp = new FollowUp
@@ -188,12 +212,15 @@ namespace AI_Powered_CRM.Services.Implementations
             if (followUp == null) return false;
 
             // Ownership check
-            if (currentUserRole == "SalesExecutive" && followUp.AssignedUserId != currentUserId)
+            if (currentUserRole != "Admin" && currentUserRole != "Manager")
             {
-                _logger.LogWarning(
-                    "User {UserId} tried to complete FollowUp {FollowUpId} not assigned to them.",
-                    currentUserId, followUpId);
-                return false;
+                if (string.IsNullOrEmpty(currentUserId) || followUp.AssignedUserId != currentUserId)
+                {
+                    _logger.LogWarning(
+                        "User {UserId} tried to complete FollowUp {FollowUpId} not assigned to them.",
+                        currentUserId, followUpId);
+                    return false;
+                }
             }
 
             followUp.Status      = FollowUpStatus.Completed;
@@ -243,12 +270,15 @@ namespace AI_Powered_CRM.Services.Implementations
             if (followUp == null) return false;
 
             // Ownership check
-            if (currentUserRole == "SalesExecutive" && followUp.AssignedUserId != currentUserId)
+            if (currentUserRole != "Admin" && currentUserRole != "Manager")
             {
-                _logger.LogWarning(
-                    "User {UserId} tried to reschedule FollowUp {FollowUpId} not assigned to them.",
-                    currentUserId, followUpId);
-                return false;
+                if (string.IsNullOrEmpty(currentUserId) || followUp.AssignedUserId != currentUserId)
+                {
+                    _logger.LogWarning(
+                        "User {UserId} tried to reschedule FollowUp {FollowUpId} not assigned to them.",
+                        currentUserId, followUpId);
+                    return false;
+                }
             }
 
             var oldDate      = followUp.DueAt;

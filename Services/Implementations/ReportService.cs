@@ -35,7 +35,7 @@ namespace AI_Powered_CRM.Services.Implementations
                 .Include(f => f.AssignedUser)
                 .Where(f => !f.Lead.IsArchived);
 
-            if (role == "SalesExecutive" && !string.IsNullOrEmpty(currentUserId))
+            if (role != "Admin" && role != "Manager")
             {
                 leadQuery = leadQuery.Where(l => l.OwnerUserId == currentUserId);
                 followUpQuery = followUpQuery.Where(f => f.AssignedUserId == currentUserId);
@@ -57,7 +57,8 @@ namespace AI_Powered_CRM.Services.Implementations
                 .Where(l => l.Status != LeadStatus.Converted && l.Status != LeadStatus.Lost && l.Budget.HasValue)
                 .Sum(l => l.Budget!.Value);
 
-            var convertedRevenue = allLeads
+            // Converted lead budgets represent estimated won deal value, not realized accounting revenue
+            var estimatedConvertedValue = allLeads
                 .Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue)
                 .Sum(l => l.Budget!.Value);
 
@@ -88,10 +89,17 @@ namespace AI_Powered_CRM.Services.Implementations
                 .Take(5)
                 .ToList();
 
-            var recentActivities = await _context.LeadActivities
+            var activityQuery = _context.LeadActivities
                 .Include(a => a.User)
                 .Include(a => a.Lead)
-                .Where(a => !a.Lead.IsArchived)
+                .Where(a => !a.Lead.IsArchived);
+
+            if (role != "Admin" && role != "Manager")
+            {
+                activityQuery = activityQuery.Where(a => a.Lead.OwnerUserId == currentUserId);
+            }
+
+            var recentActivities = await activityQuery
                 .OrderByDescending(a => a.OccurredAt)
                 .Take(6)
                 .ToListAsync();
@@ -114,7 +122,8 @@ namespace AI_Powered_CRM.Services.Implementations
                 ConvertedCount = converted,
                 LostCount = lost,
                 TotalPipelineValue = pipelineValue,
-                ConvertedRevenue = convertedRevenue,
+                EstimatedConvertedValue = estimatedConvertedValue,
+                ConvertedRevenue = estimatedConvertedValue,
                 WinRatePercentage = Math.Round(winRate, 1),
                 FollowUpsDueTodayCount = dueTodayCount,
                 FollowUpsOverdueCount = overdueCount,
@@ -144,8 +153,9 @@ namespace AI_Powered_CRM.Services.Implementations
             var closed = converted + lost;
             var winRate = closed > 0 ? (double)converted / closed * 100.0 : 0.0;
 
-            var wonRevenue = leads.Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue).Sum(l => l.Budget!.Value);
-            var avgDeal = converted > 0 ? wonRevenue / converted : 0m;
+            // Won lead budgets represent estimated conversion value, not realized accounting revenue
+            var wonDealValue = leads.Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue).Sum(l => l.Budget!.Value);
+            var avgDeal = converted > 0 ? wonDealValue / converted : 0m;
 
             var stageDropoffs = leads
                 .GroupBy(l => l.Status.ToString())
@@ -157,7 +167,8 @@ namespace AI_Powered_CRM.Services.Implementations
                 ConvertedLeads = converted,
                 LostLeads = lost,
                 ConversionRate = Math.Round(winRate, 1),
-                TotalWonRevenue = wonRevenue,
+                TotalWonDealValue = wonDealValue,
+                TotalWonRevenue = wonDealValue,
                 AverageDealSize = Math.Round(avgDeal, 2),
                 StageDropoffs = stageDropoffs
             };
@@ -174,7 +185,7 @@ namespace AI_Powered_CRM.Services.Implementations
                     var count = g.Count();
                     var converted = g.Count(l => l.Status == LeadStatus.Converted);
                     var rate = count > 0 ? (double)converted / count * 100.0 : 0.0;
-                    var rev = g.Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue).Sum(l => l.Budget!.Value);
+                    var estValue = g.Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue).Sum(l => l.Budget!.Value);
 
                     return new SourcePerformanceDto
                     {
@@ -182,10 +193,11 @@ namespace AI_Powered_CRM.Services.Implementations
                         LeadCount = count,
                         ConvertedCount = converted,
                         ConversionRate = Math.Round(rate, 1),
-                        TotalRevenue = rev
+                        EstimatedWonValue = estValue,
+                        TotalRevenue = estValue
                     };
                 })
-                .OrderByDescending(s => s.TotalRevenue)
+                .OrderByDescending(s => s.EstimatedWonValue)
                 .ThenByDescending(s => s.LeadCount)
                 .ToList();
         }
@@ -207,7 +219,7 @@ namespace AI_Powered_CRM.Services.Implementations
                     var leadCount = g.Count();
                     var converted = g.Count(l => l.Status == LeadStatus.Converted);
                     var rate = leadCount > 0 ? (double)converted / leadCount * 100.0 : 0.0;
-                    var rev = g.Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue).Sum(l => l.Budget!.Value);
+                    var estValue = g.Where(l => l.Status == LeadStatus.Converted && l.Budget.HasValue).Sum(l => l.Budget!.Value);
                     var compFollowUps = followUps.Count(f => f.AssignedUserId == g.Key && f.Status == FollowUpStatus.Completed);
 
                     return new StaffPerformanceDto
@@ -218,10 +230,11 @@ namespace AI_Powered_CRM.Services.Implementations
                         CompletedFollowUpsCount = compFollowUps,
                         ConvertedLeadsCount = converted,
                         ConversionRate = Math.Round(rate, 1),
-                        ClosedRevenue = rev
+                        ClosedWonDealValue = estValue,
+                        ClosedRevenue = estValue
                     };
                 })
-                .OrderByDescending(s => s.ClosedRevenue)
+                .OrderByDescending(s => s.ClosedWonDealValue)
                 .ToList();
         }
     }

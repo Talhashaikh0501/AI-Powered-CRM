@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using AI_Powered_CRM.DTOs;
 using AI_Powered_CRM.Models.Enums;
+using AI_Powered_CRM.Security;
 using AI_Powered_CRM.Services.Interfaces;
 using AI_Powered_CRM.ViewModels;
 using Microsoft.AspNetCore.Authorization;
@@ -10,18 +11,20 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AI_Powered_CRM.Controllers
 {
-    [Authorize]
+    [Authorize(Policy = "TenantRequired")]
     public class PipelineController : Controller
     {
         private readonly ILeadService _leadService;
+        private readonly IAuthorizationService _authService;
 
-        public PipelineController(ILeadService leadService)
+        public PipelineController(ILeadService leadService, IAuthorizationService authService)
         {
             _leadService = leadService;
+            _authService = authService;
         }
 
         private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        private string GetUserRole() => User.IsInRole("Admin") ? "Admin" : (User.IsInRole("Manager") ? "Manager" : "SalesExecutive");
+        private string GetUserRole() => User.IsInRole("Admin") ? "Admin" : (User.IsInRole("Manager") ? "Manager" : (User.IsInRole("SalesExecutive") ? "SalesExecutive" : "Unknown"));
 
         // GET: /Pipeline
         public async Task<IActionResult> Index()
@@ -53,6 +56,12 @@ namespace AI_Powered_CRM.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> MoveStage([FromBody] ChangeLeadStatusDto dto)
         {
+            var authResult = await _authService.AuthorizeAsync(User, dto.LeadId, new LeadOwnershipRequirement());
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+
             var success = await _leadService.ChangeStatusAsync(
                 dto.LeadId, dto.NewStatus, dto.Notes ?? "Moved via Pipeline Kanban", GetUserId(), GetUserRole()
             );
