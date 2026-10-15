@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models;
 using AI_Powered_CRM.Models.Entities;
+using AI_Powered_CRM.Models.Enums;
 using AI_Powered_CRM.Security;
 using AI_Powered_CRM.Services.Interfaces;
 using AI_Powered_CRM.ViewModels;
@@ -26,6 +27,7 @@ namespace AI_Powered_CRM.Controllers
         private readonly ITenantContext _tenantContext;
         private readonly ITenantInvitationService _invitationService;
         private readonly ISubscriptionQuotaService _quotaService;
+        private readonly ISupportAccessService _supportAccessService;
 
         public AdminController(
             UserManager<ApplicationUser> userManager,
@@ -34,7 +36,8 @@ namespace AI_Powered_CRM.Controllers
             ApplicationDbContext context,
             ITenantContext tenantContext,
             ITenantInvitationService invitationService,
-            ISubscriptionQuotaService quotaService)
+            ISubscriptionQuotaService quotaService,
+            ISupportAccessService supportAccessService)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -43,40 +46,143 @@ namespace AI_Powered_CRM.Controllers
             _tenantContext = tenantContext;
             _invitationService = invitationService;
             _quotaService = quotaService;
+            _supportAccessService = supportAccessService;
         }
 
         // GET: /Admin/Users
-        public async Task<IActionResult> Users()
+        public async Task<IActionResult> Users(string? search = null, string? roleFilter = null)
         {
             var currentTenantId = _tenantContext.CurrentTenantId;
-            var tenantUserIds = await _context.TenantMemberships
+            var tenant = await _context.Tenants.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TenantId == currentTenantId);
+
+            var memberships = await _context.TenantMemberships
                 .Where(m => m.TenantId == currentTenantId)
-                .Select(m => m.UserId)
                 .ToListAsync();
 
-            var users = await _userManager.Users
-                .Where(u => tenantUserIds.Contains(u.Id))
-                .OrderBy(u => u.UserName)
-                .ToListAsync();
+            var activeSeats = memberships.Count(m => m.IsActive);
+            var activeAdminCount = memberships.Count(m => m.IsActive && m.CompanyRole == CompanyRole.CompanyAdmin);
+            var tenantUserIds = memberships.Select(m => m.UserId).ToList();
+
+            var usersQuery = _userManager.Users
+                .Where(u => tenantUserIds.Contains(u.Id));
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim().ToLower();
+                usersQuery = usersQuery.Where(u =>
+                    (u.FullName != null && u.FullName.ToLower().Contains(term)) ||
+                    (u.UserName != null && u.UserName.ToLower().Contains(term)) ||
+                    (u.Email != null && u.Email.ToLower().Contains(term)));
+            }
+
+            var users = await usersQuery.OrderBy(u => u.UserName).ToListAsync();
 
             var list = new List<UserWithRoleDto>();
-
             foreach (var u in users)
             {
+                var mem = memberships.FirstOrDefault(m => m.UserId == u.Id);
+                var compRole = mem?.CompanyRole ?? CompanyRole.SalesExecutive;
+
+                if (!string.IsNullOrWhiteSpace(roleFilter) && !string.Equals(compRole.ToString(), roleFilter, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var roles = await _userManager.GetRolesAsync(u);
+                var isLastAdmin = compRole == CompanyRole.CompanyAdmin && (mem?.IsActive ?? false) && activeAdminCount <= 1;
+
                 list.Add(new UserWithRoleDto
                 {
                     Id = u.Id,
                     UserName = u.UserName ?? string.Empty,
                     FullName = u.FullName ?? u.UserName ?? "User",
                     Email = u.Email ?? string.Empty,
-                    Role = roles.FirstOrDefault() ?? "SalesExecutive",
-                    IsActive = u.IsActive,
+                    Role = roles.FirstOrDefault() ?? compRole.ToString(),
+                    CompanyRole = compRole,
+                    IsActive = (mem?.IsActive ?? false) && u.IsActive,
+                    IsLastAdmin = isLastAdmin,
                     CreatedAt = u.CreatedAt
                 });
             }
 
-            return View(new AdminUsersViewModel { Users = list });
+            var vm = new AdminUsersViewModel
+            {
+                Users = list,
+                SearchTerm = search,
+                RoleFilter = roleFilter,
+                ActiveUserSeats = activeSeats,
+                MaxUserSeats = tenant?.MaxUserSeats ?? 5
+            };
+
+            return View(vm);
+        }
+
+        // POST: /Admin/ChangeUserRole
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangeUserRole(string userId, CompanyRole newRole)
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var membership = await _context.TenantMemberships
+                .FirstOrDefaultAsync(m => m.TenantId == currentTenantId && m.UserId == userId);
+
+            if (membership == null)
+            {
+                TempData["ErrorMessage"] = "User not found in current workspace.";
+                return RedirectToAction(nameof(Users));
+            }
+
+            if (membership.CompanyRole == CompanyRole.CompanyAdmin && newRole != CompanyRole.CompanyAdmin)
+            {
+                var activeAdmins = await _context.TenantMemberships
+                    .CountAsync(m => m.TenantId == currentTenantId && m.IsActive && m.CompanyRole == CompanyRole.CompanyAdmin);
+
+                if (activeAdmins <= 1)
+                {
+                    TempData["ErrorMessage"] = "Cannot change the role of the last active Company Administrator in this workspace.";
+                    return RedirectToAction(nameof(Users));
+                }
+            }
+
+            var oldRole = membership.CompanyRole;
+            membership.CompanyRole = newRole;
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                var existingRoles = await _userManager.GetRolesAsync(user);
+                var crmRoles = new[] { "CompanyAdmin", "Admin", "Manager", "SalesExecutive" };
+                var rolesToRemove = existingRoles.Where(r => crmRoles.Contains(r)).ToList();
+                if (rolesToRemove.Any())
+                {
+                    await _userManager.RemoveFromRolesAsync(user, rolesToRemove);
+                }
+
+                var rolesToAdd = new List<string> { newRole.ToString() };
+                if (newRole == CompanyRole.CompanyAdmin)
+                {
+                    rolesToAdd.Add("Admin");
+                }
+
+                foreach (var r in rolesToAdd)
+                {
+                    if (!await _roleManager.RoleExistsAsync(r))
+                    {
+                        await _roleManager.CreateAsync(new IdentityRole(r));
+                    }
+                }
+                await _userManager.AddToRolesAsync(user, rolesToAdd);
+                await _userManager.UpdateSecurityStampAsync(user);
+            }
+
+            await _context.SaveChangesAsync();
+
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await _auditService.LogAsync(adminId, "TenantMembership", membership.MembershipId.ToString(), "UserRoleChanged",
+                new { TargetUserId = userId, OldRole = oldRole.ToString(), NewRole = newRole.ToString() }, isSecurityCritical: true);
+
+            TempData["SuccessMessage"] = $"Role for {user?.FullName ?? user?.UserName ?? "employee"} updated to {newRole}.";
+            return RedirectToAction(nameof(Users));
         }
 
         // POST: /Admin/ToggleUserStatus
@@ -85,25 +191,44 @@ namespace AI_Powered_CRM.Controllers
         public async Task<IActionResult> ToggleUserStatus(string id)
         {
             var currentTenantId = _tenantContext.CurrentTenantId;
-            var isMember = await _context.TenantMemberships
-                .AnyAsync(m => m.TenantId == currentTenantId && m.UserId == id);
+            var membership = await _context.TenantMemberships
+                .FirstOrDefaultAsync(m => m.TenantId == currentTenantId && m.UserId == id);
 
-            if (!isMember)
+            if (membership == null)
             {
                 return Forbid();
             }
 
+            // Prevent deactivating the only remaining CompanyAdmin
+            if (membership.IsActive && membership.CompanyRole == CompanyRole.CompanyAdmin)
+            {
+                var activeAdmins = await _context.TenantMemberships
+                    .CountAsync(m => m.TenantId == currentTenantId && m.IsActive && m.CompanyRole == CompanyRole.CompanyAdmin);
+
+                if (activeAdmins <= 1)
+                {
+                    TempData["ErrorMessage"] = "Cannot deactivate the only active Company Administrator in this workspace.";
+                    return RedirectToAction(nameof(Users));
+                }
+            }
+
+            membership.IsActive = !membership.IsActive;
+
             var user = await _userManager.FindByIdAsync(id);
             if (user != null)
             {
-                user.IsActive = !user.IsActive;
+                // If member is being deactivated in their current workspace, also toggle or invalidate security stamp
+                user.IsActive = membership.IsActive;
                 await _userManager.UpdateAsync(user);
                 await _userManager.UpdateSecurityStampAsync(user); // Invalidate active user session immediately
 
                 var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                await _auditService.LogAsync(adminId, "User", user.Id, "ToggleStatus", new { user.IsActive, user.UserName }, isSecurityCritical: true);
-                TempData["SuccessMessage"] = $"User status updated to {(user.IsActive ? "Active" : "Disabled")}.";
+                await _auditService.LogAsync(adminId, "User", user.Id, "ToggleStatus",
+                    new { MembershipIsActive = membership.IsActive, user.UserName }, isSecurityCritical: true);
+                TempData["SuccessMessage"] = $"Employee status updated to {(membership.IsActive ? "Active" : "Disabled")}.";
             }
+
+            await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Users));
         }
 
@@ -284,6 +409,68 @@ namespace AI_Powered_CRM.Controllers
 
             TempData["SuccessMessage"] = "Company preferences and workspace settings saved successfully.";
             return RedirectToAction(nameof(Settings));
+        }
+
+        // GET: /Admin/SupportAccess
+        public async Task<IActionResult> SupportAccess()
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var tickets = await _supportAccessService.GetTicketsForTenantAsync(currentTenantId);
+            return View(tickets);
+        }
+
+        // POST: /Admin/ApproveSupportAccess
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ApproveSupportAccess(Guid ticketId)
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var ticket = await _supportAccessService.GetTicketByIdAsync(ticketId);
+
+            if (ticket == null || ticket.TenantId != currentTenantId)
+            {
+                TempData["ErrorMessage"] = "Support access ticket not found for this workspace.";
+                return RedirectToAction(nameof(SupportAccess));
+            }
+
+            try
+            {
+                await _supportAccessService.ApproveTicketAsync(ticketId, TimeSpan.FromHours(4), User);
+                TempData["SuccessMessage"] = $"Support access approved for 4 hours (Ticket: {ticket.TicketNumber}).";
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = $"Failed to approve ticket: {ex.Message}";
+            }
+
+            return RedirectToAction(nameof(SupportAccess));
+        }
+
+        // POST: /Admin/RevokeSupportAccess
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RevokeSupportAccess(Guid ticketId, string? reason)
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var ticket = await _supportAccessService.GetTicketByIdAsync(ticketId);
+
+            if (ticket == null || ticket.TenantId != currentTenantId)
+            {
+                TempData["ErrorMessage"] = "Support access ticket not found for this workspace.";
+                return RedirectToAction(nameof(SupportAccess));
+            }
+
+            try
+            {
+                await _supportAccessService.RevokeTicketAsync(ticketId, reason ?? "Revoked by Customer Company Administrator", User);
+                TempData["SuccessMessage"] = "Support access has been revoked immediately.";
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = $"Failed to revoke ticket: {ex.Message}";
+            }
+
+            return RedirectToAction(nameof(SupportAccess));
         }
     }
 }

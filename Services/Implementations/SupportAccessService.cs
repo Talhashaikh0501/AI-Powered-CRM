@@ -553,5 +553,46 @@ namespace AI_Powered_CRM.Services.Implementations
                 _context.IgnoreTenantFilter = previousIgnore;
             }
         }
+
+        public async Task<System.Collections.Generic.List<SupportAccessTicket>> GetTicketsForTenantAsync(Guid tenantId)
+        {
+            var previousIgnore = _context.IgnoreTenantFilter;
+            try
+            {
+                _context.IgnoreTenantFilter = true;
+                return await _context.SupportAccessTickets
+                    .Include(t => t.Tenant)
+                    .Include(t => t.SuperAdminUser)
+                    .Include(t => t.CreatedByUser)
+                    .Include(t => t.ApprovedByUser)
+                    .Where(t => t.TenantId == tenantId)
+                    .OrderByDescending(t => t.CreatedAt)
+                    .ToListAsync();
+            }
+            finally
+            {
+                _context.IgnoreTenantFilter = previousIgnore;
+            }
+        }
+
+        public async Task<System.Collections.Generic.List<SupportAccessTicket>> GetAllTicketsAsync()
+        {
+            var previousIgnore = _context.IgnoreTenantFilter;
+            try
+            {
+                _context.IgnoreTenantFilter = true;
+                return await _context.SupportAccessTickets
+                    .Include(t => t.Tenant)
+                    .Include(t => t.SuperAdminUser)
+                    .Include(t => t.CreatedByUser)
+                    .Include(t => t.ApprovedByUser)
+                    .OrderByDescending(t => t.CreatedAt)
+                    .ToListAsync();
+            }
+            finally
+            {
+                _context.IgnoreTenantFilter = previousIgnore;
+            }
+        }
     }
 }

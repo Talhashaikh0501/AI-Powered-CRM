@@ -1,0 +1,131 @@
+@model AI_Powered_CRM.ViewModels.PlatformDashboardViewModel
+@{
+    ViewData["Title"] = "Platform SuperAdmin Dashboard";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h3 class="fw-bold text-dark mb-0">Platform SuperAdmin SaaS Operations</h3>
+            <span class="badge bg-danger">Platform Operations</span>
+        </div>
+        <p class="text-muted small mb-0">
+            Cross-tenant aggregate telemetry, subscription distribution, and platform health. Tenant privacy is strictly preserved.
+        </p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Support" class="btn btn-primary btn-sm">
+            <i class="bi bi-shield-lock-fill me-1"></i> Delegated Support Portal
+        </a>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- SaaS Metrics Overview -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3 h-100">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Companies</div>
+            <div class="fs-2 fw-bold text-dark">@Model.TotalTenantsCount</div>
+            <div class="small text-success"><i class="bi bi-check-circle-fill me-1"></i>@Model.ActiveTenantsCount Active Tenants</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3 h-100">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Active Platform Users</div>
+            <div class="fs-2 fw-bold text-primary">@Model.TotalPlatformUsersCount</div>
+            <div class="small text-muted">Across all customer organizations</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3 h-100">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Platform AI Calls (Month)</div>
+            <div class="fs-2 fw-bold text-info">@Model.TotalAiCallsThisMonth.ToString("N0")</div>
+            <div class="small text-muted">Total Groq AI inferences processed</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-sm-6">
+        <div class="crm-card p-3 h-100">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Subscription Tiers</div>
+            <div class="d-flex flex-wrap gap-1 mt-2">
+                @foreach (var tier in Model.TierDistribution)
+                {
+                    <span class="badge bg-light text-dark border small">
+                        @tier.Key: <strong>@tier.Value</strong>
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tenant Organizations Directory -->
+<div class="crm-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h5 class="fw-bold text-dark mb-0">Tenant Organizations Directory</h5>
+            <small class="text-muted">High-level account health, seat consumption, and AI quota utilization</small>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                <tr>
+                    <th class="ps-3">Company / Slug</th>
+                    <th>Billing Contact</th>
+                    <th>Tier & Status</th>
+                    <th>Active Seats</th>
+                    <th>AI Usage (Month)</th>
+                    <th>Registered</th>
+                    <th class="text-end pe-3">Support Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Model.Tenants)
+                {
+                    <tr>
+                        <td class="ps-3">
+                            <span class="fw-bold text-dark d-block">@t.CompanyName</span>
+                            <small class="font-monospace text-muted">/t/@t.Slug</small>
+                        </td>
+                        <td>
+                            <span class="text-secondary font-monospace small">@t.ContactEmail</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle me-1">@t.Tier</span>
+                            <span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Disabled")</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">@t.ActiveSeats / @t.MaxUserSeats</span>
+                        </td>
+                        <td>
+                            <span class="small">@t.CurrentMonthAiUsageCount / @t.MonthlyAiRequestLimit</span>
+                        </td>
+                        <td class="text-muted small">@t.CreatedAt.ToString("MMM dd, yyyy")</td>
+                        <td class="text-end pe-3">
+                            <a asp-action="Support" asp-route-targetTenantId="@t.TenantId" class="btn btn-sm btn-outline-primary py-1 px-2" style="font-size: 0.75rem;">
+                                <i class="bi bi-shield-plus me-1"></i> Request Support Access
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

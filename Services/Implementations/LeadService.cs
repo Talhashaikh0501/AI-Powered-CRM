@@ -8,6 +8,7 @@ using AI_Powered_CRM.Data;
 using AI_Powered_CRM.DTOs;
 using AI_Powered_CRM.Models.Entities;
 using AI_Powered_CRM.Models.Enums;
+using AI_Powered_CRM.Security;
 using AI_Powered_CRM.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,8 @@ namespace AI_Powered_CRM.Services.Implementations
         private readonly IAIService _aiService;
         private readonly IAuditService _auditService;
         private readonly INotificationService _notificationService;
+        private readonly ILeadAssignmentService _assignmentService;
+        private readonly ITenantContext _tenantContext;
         private readonly ILogger<LeadService> _logger;
 
         public LeadService(
@@ -27,13 +30,30 @@ namespace AI_Powered_CRM.Services.Implementations
             IAIService aiService,
             IAuditService auditService,
             INotificationService notificationService,
+            ILeadAssignmentService assignmentService,
+            ITenantContext tenantContext,
             ILogger<LeadService> logger)
         {
             _context = context;
             _aiService = aiService;
             _auditService = auditService;
             _notificationService = notificationService;
+            _assignmentService = assignmentService;
+            _tenantContext = tenantContext;
             _logger = logger;
+        }
+
+        public LeadService(
+            ApplicationDbContext context,
+            IAIService aiService,
+            IAuditService auditService,
+            INotificationService notificationService,
+            ILogger<LeadService> logger)
+            : this(context, aiService, auditService, notificationService,
+                   new LeadAssignmentService(context, auditService, Microsoft.Extensions.Logging.Abstractions.NullLogger<LeadAssignmentService>.Instance),
+                   new TenantContext(),
+                   logger)
+        {
         }
 
         public async Task<(List<Lead> Leads, int TotalCount)> GetPagedLeadsAsync(
@@ -134,17 +154,7 @@ namespace AI_Powered_CRM.Services.Implementations
             string ownerUserId;
             if (role == "Admin" || role == "Manager")
             {
-                if (!string.IsNullOrWhiteSpace(dto.OwnerUserId))
-                {
-                    var targetUser = await _context.Users
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(u => u.Id == dto.OwnerUserId && u.IsActive);
-                    ownerUserId = targetUser != null ? targetUser.Id : currentUserId;
-                }
-                else
-                {
-                    ownerUserId = currentUserId;
-                }
+                ownerUserId = await _assignmentService.DetermineLeadOwnerAsync(_tenantContext.CurrentTenantId, dto.OwnerUserId, currentUserId);
             }
             else
             {
@@ -419,6 +429,7 @@ namespace AI_Powered_CRM.Services.Implementations
             var query = _context.Leads
                 .Include(l => l.OwnerUser)
                 .Include(l => l.AIInsights)
+                .Include(l => l.FollowUps)
                 .Where(l => !l.IsArchived);
 
             if (role != "Admin" && role != "Manager")

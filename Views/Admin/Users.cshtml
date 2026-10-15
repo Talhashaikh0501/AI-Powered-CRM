@@ -1,42 +1,111 @@
 @model AI_Powered_CRM.ViewModels.AdminUsersViewModel
 @{
-    ViewData["Title"] = "User & Role Management";
+    ViewData["Title"] = "Team & Access Management";
+    var percentSeats = Model.MaxUserSeats > 0 ? (int)Math.Round((double)Model.ActiveUserSeats / Model.MaxUserSeats * 100) : 0;
 }
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
     <div>
-        <h3 class="fw-bold text-dark mb-1">User & Role Management</h3>
+        <h3 class="fw-bold text-dark mb-1">Team & Access Management</h3>
         <p class="text-muted small mb-0">
-            Control system access, view user role assignments, and manage account statuses.
+            Manage your workspace team members, role assignments, and platform access permissions.
         </p>
     </div>
-    <div>
+    <div class="d-flex align-items-center gap-2">
+        <div class="bg-white border rounded-3 px-3 py-2 d-flex align-items-center gap-3 shadow-sm">
+            <div>
+                <small class="text-muted d-block" style="font-size: 0.75rem;">SEAT QUOTA</small>
+                <span class="fw-bold fs-6">@Model.ActiveUserSeats / @Model.MaxUserSeats Seats</span>
+            </div>
+            <div class="progress" style="width: 70px; height: 8px;">
+                <div class="progress-bar @(percentSeats >= 90 ? "bg-danger" : (percentSeats >= 70 ? "bg-warning" : "bg-primary"))"
+                     role="progressbar" style="width: @percentSeats%"></div>
+            </div>
+        </div>
         <a asp-action="Invitations" class="btn btn-primary btn-sm">
-            <i class="bi bi-person-plus-fill me-1"></i> Manage Invitations
+            <i class="bi bi-person-plus-fill me-1"></i> Invite Employee
         </a>
     </div>
 </div>
 
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Filters & Search Toolbar -->
+<div class="crm-card p-3 mb-4">
+    <form method="get" asp-action="Users" class="row g-2 align-items-center">
+        <div class="col-md-5 col-lg-6">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" name="search" value="@Model.SearchTerm" class="form-control border-start-0"
+                       placeholder="Search by name, email or username..." />
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4">
+            <select name="roleFilter" class="form-select form-select-sm">
+                <option value="">All Roles</option>
+                <option value="CompanyAdmin" selected="@(Model.RoleFilter == "CompanyAdmin" ? "selected" : null)">CompanyAdmin</option>
+                <option value="Manager" selected="@(Model.RoleFilter == "Manager" ? "selected" : null)">Manager</option>
+                <option value="SalesExecutive" selected="@(Model.RoleFilter == "SalesExecutive" ? "selected" : null)">SalesExecutive</option>
+            </select>
+        </div>
+        <div class="col-md-3 col-lg-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-funnel me-1"></i> Filter
+            </button>
+            @if (!string.IsNullOrEmpty(Model.SearchTerm) || !string.IsNullOrEmpty(Model.RoleFilter))
+            {
+                <a asp-action="Users" class="btn btn-outline-secondary btn-sm" title="Clear Filters">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            }
+        </div>
+    </form>
+</div>
+
+<!-- Team Table -->
 <div class="crm-card overflow-hidden">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
             <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
                 <tr>
-                    <th class="ps-4">Full Name / Username</th>
+                    <th class="ps-4">Employee</th>
                     <th>Email</th>
-                    <th>System Role</th>
-                    <th>Account Status</th>
-                    <th>Registered Date</th>
+                    <th>Role in Workspace</th>
+                    <th>Status</th>
+                    <th>Joined</th>
                     <th class="text-end pe-4">Actions</th>
                 </tr>
             </thead>
             <tbody>
+                @if (!Model.Users.Any())
+                {
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <i class="bi bi-people fs-1 d-block mb-2 text-secondary"></i>
+                            No team members found matching your search criteria.
+                        </td>
+                    </tr>
+                }
                 @foreach (var user in Model.Users)
                 {
                     <tr>
                         <td class="ps-4">
                             <div class="d-flex align-items-center gap-2">
-                                <div class="user-avatar-badge" style="width: 32px; height: 32px;">
+                                <div class="user-avatar-badge" style="width: 34px; height: 34px;">
                                     @user.FullName.Substring(0, 1).ToUpper()
                                 </div>
                                 <div>
@@ -45,11 +114,59 @@
                                 </div>
                             </div>
                         </td>
-                        <td>@user.Email</td>
                         <td>
-                            <span class="badge @(user.Role == "Admin" ? "bg-danger" : (user.Role == "Manager" ? "bg-warning text-dark" : "bg-primary"))">
-                                @user.Role
-                            </span>
+                            <span class="text-secondary font-monospace small">@user.Email</span>
+                        </td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-sm dropdown-toggle d-inline-flex align-items-center gap-1 @(user.CompanyRole == AI_Powered_CRM.Models.Enums.CompanyRole.CompanyAdmin ? "btn-outline-danger" : (user.CompanyRole == AI_Powered_CRM.Models.Enums.CompanyRole.Manager ? "btn-outline-warning" : "btn-outline-info"))"
+                                        type="button" data-bs-toggle="dropdown" aria-expanded="false" @(user.IsLastAdmin ? "disabled" : "") title="@(user.IsLastAdmin ? "Cannot change role of last workspace administrator" : "Click to change role")">
+                                    <i class="bi bi-shield-check"></i>
+                                    <span>@user.CompanyRole</span>
+                                </button>
+                                @if (user.IsLastAdmin)
+                                {
+                                    <small class="d-block text-danger mt-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-lock-fill"></i> Sole Admin
+                                    </small>
+                                }
+                                else
+                                {
+                                    <ul class="dropdown-menu shadow-sm">
+                                        <li><h6 class="dropdown-header">Assign Workspace Role</h6></li>
+                                        <li>
+                                            <form asp-action="ChangeUserRole" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <input type="hidden" name="newRole" value="@AI_Powered_CRM.Models.Enums.CompanyRole.CompanyAdmin" />
+                                                <button type="submit" class="dropdown-item @(user.CompanyRole == AI_Powered_CRM.Models.Enums.CompanyRole.CompanyAdmin ? "active" : "")">
+                                                    <i class="bi bi-shield-fill-check text-danger me-2"></i> CompanyAdmin
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form asp-action="ChangeUserRole" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <input type="hidden" name="newRole" value="@AI_Powered_CRM.Models.Enums.CompanyRole.Manager" />
+                                                <button type="submit" class="dropdown-item @(user.CompanyRole == AI_Powered_CRM.Models.Enums.CompanyRole.Manager ? "active" : "")">
+                                                    <i class="bi bi-briefcase-fill text-warning me-2"></i> Manager
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form asp-action="ChangeUserRole" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <input type="hidden" name="newRole" value="@AI_Powered_CRM.Models.Enums.CompanyRole.SalesExecutive" />
+                                                <button type="submit" class="dropdown-item @(user.CompanyRole == AI_Powered_CRM.Models.Enums.CompanyRole.SalesExecutive ? "active" : "")">
+                                                    <i class="bi bi-person-badge text-info me-2"></i> SalesExecutive
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                }
+                            </div>
                         </td>
                         <td>
                             <span class="badge @(user.IsActive ? "bg-success" : "bg-secondary")">
@@ -58,13 +175,52 @@
                         </td>
                         <td class="text-muted small">@user.CreatedAt.ToString("MMM dd, yyyy")</td>
                         <td class="text-end pe-4">
-                            <form asp-action="ToggleUserStatus" method="post" class="d-inline">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="id" value="@user.Id" />
-                                <button type="submit" class="btn btn-sm @(user.IsActive ? "btn-outline-danger" : "btn-outline-success")">
-                                    @(user.IsActive ? "Disable Access" : "Activate User")
+                            @if (user.IsLastAdmin)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Sole Company Administrator cannot be deactivated.">
+                                    <i class="bi bi-shield-lock me-1"></i> Protected
                                 </button>
-                            </form>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm @(user.IsActive ? "btn-outline-danger" : "btn-outline-success")"
+                                        data-bs-toggle="modal" data-bs-target="#toggleStatusModal-@user.Id">
+                                    <i class="bi @(user.IsActive ? "bi-person-x" : "bi-person-check") me-1"></i>
+                                    @(user.IsActive ? "Deactivate" : "Activate")
+                                </button>
+
+                                <!-- Confirmation Modal -->
+                                <div class="modal fade text-start" id="toggleStatusModal-@user.Id" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered modal-sm">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title fw-bold">@(user.IsActive ? "Deactivate Employee" : "Reactivate Employee")</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body small">
+                                                @if (user.IsActive)
+                                                {
+                                                    <p class="mb-0">Are you sure you want to deactivate <strong>@user.FullName</strong>? They will immediately lose access to this workspace until reactivated.</p>
+                                                }
+                                                else
+                                                {
+                                                    <p class="mb-0">Reactivate <strong>@user.FullName</strong> to restore their workspace access and permissions?</p>
+                                                }
+                                            </div>
+                                            <div class="modal-footer p-2">
+                                                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                                <form asp-action="ToggleUserStatus" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@user.Id" />
+                                                    <button type="submit" class="btn btn-sm @(user.IsActive ? "btn-danger" : "btn-success")">
+                                                        Confirm @(user.IsActive ? "Deactivation" : "Activation")
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
                         </td>
                     </tr>
                 }

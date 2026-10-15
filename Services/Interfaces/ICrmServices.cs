@@ -60,5 +60,6 @@ namespace AI_Powered_CRM.Services.Interfaces
         Task<ConversionReportDto>        GetConversionReportAsync();
         Task<List<SourcePerformanceDto>> GetSourcePerformanceAsync();
         Task<List<StaffPerformanceDto>>  GetStaffPerformanceAsync();
+        Task<AI_Powered_CRM.ViewModels.AIInsightsViewModel> GetAIInsightsAsync(string? currentUserId, string? role);
     }
 }

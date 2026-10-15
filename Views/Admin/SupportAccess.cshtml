@@ -1,0 +1,153 @@
+@model List<AI_Powered_CRM.Models.Entities.SupportAccessTicket>
+@{
+    ViewData["Title"] = "Platform Support Access Management";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h3 class="fw-bold text-dark mb-0">Platform Support Access</h3>
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">Customer Controlled</span>
+        </div>
+        <p class="text-muted small mb-0">
+            Review, approve, or revoke temporary troubleshooting access requests from platform engineering staff.
+        </p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Settings" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-gear me-1"></i> Company Settings
+        </a>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="crm-card p-4 mb-4 bg-light border-start border-4 border-info">
+    <div class="d-flex align-items-start gap-3">
+        <div class="rounded-circle bg-white text-info p-2 shadow-sm d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+            <i class="bi bi-shield-lock-fill fs-5"></i>
+        </div>
+        <div>
+            <h6 class="fw-bold text-dark mb-1">How Delegated Support Works</h6>
+            <p class="text-muted small mb-0">
+                To protect your proprietary customer data, platform engineers cannot inspect your workspace without your explicit consent. 
+                When a support ticket is opened, engineers request temporary access. Approving a request grants <strong>4 hours of read/troubleshoot access</strong>, 
+                which you can revoke at any time with immediate effect.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="crm-card p-4">
+    <h5 class="fw-bold text-dark mb-3">Support Access Requests for Your Workspace</h5>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                <tr>
+                    <th class="ps-3">Ticket Ref #</th>
+                    <th>Engineer ID / Name</th>
+                    <th>Stated Operational Reason</th>
+                    <th>Status</th>
+                    <th>Requested</th>
+                    <th>Session Expiration</th>
+                    <th class="text-end pe-3">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-shield-check fs-1 text-success mb-2 d-block"></i>
+                            No platform support access requests. Your workspace is completely private and accessible only to your team.
+                        </td>
+                    </tr>
+                }
+                @foreach (var ticket in Model)
+                {
+                    <tr>
+                        <td class="ps-3 font-monospace fw-bold text-dark">
+                            @ticket.TicketNumber
+                        </td>
+                        <td>
+                            <span class="small font-monospace text-dark">@(ticket.SuperAdminUser?.FullName ?? ticket.SuperAdminUser?.UserName ?? ticket.SuperAdminUserId)</span>
+                        </td>
+                        <td style="max-width: 280px;">
+                            <span class="small text-dark d-block text-truncate" title="@ticket.Reason">@ticket.Reason</span>
+                        </td>
+                        <td>
+                            @if (ticket.IsActive)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active Session</span>
+                            }
+                            else if (ticket.Status == "Pending")
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pending Your Approval</span>
+                            }
+                            else if (ticket.Status == "Revoked")
+                            {
+                                <span class="badge bg-danger">Revoked</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">@ticket.Status</span>
+                            }
+                        </td>
+                        <td class="small text-muted">@ticket.CreatedAt.ToString("MMM dd, HH:mm")</td>
+                        <td class="small text-muted">
+                            @(ticket.ApprovedAt.HasValue ? ticket.ExpiresAt.ToString("MMM dd, HH:mm") : "Not yet approved")
+                        </td>
+                        <td class="text-end pe-3">
+                            @if (ticket.Status == "Pending")
+                            {
+                                <div class="btn-group btn-group-sm">
+                                    <form asp-action="ApproveSupportAccess" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="ticketId" value="@ticket.TicketId" />
+                                        <button type="submit" class="btn btn-sm btn-success py-1 px-2" style="font-size: 0.75rem;">
+                                            <i class="bi bi-check-lg me-1"></i> Approve (4h)
+                                        </button>
+                                    </form>
+                                    <form asp-action="RevokeSupportAccess" method="post" class="d-inline ms-1">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="ticketId" value="@ticket.TicketId" />
+                                        <input type="hidden" name="reason" value="Rejected by Customer Admin" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" style="font-size: 0.75rem;">
+                                            Reject
+                                        </button>
+                                    </form>
+                                </div>
+                            }
+                            else if (ticket.IsActive)
+                            {
+                                <form asp-action="RevokeSupportAccess" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="ticketId" value="@ticket.TicketId" />
+                                    <input type="hidden" name="reason" value="Revoked early by Customer Admin" />
+                                    <button type="submit" class="btn btn-sm btn-danger py-1 px-2" style="font-size: 0.75rem;">
+                                        <i class="bi bi-x-circle me-1"></i> Revoke Now
+                                    </button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

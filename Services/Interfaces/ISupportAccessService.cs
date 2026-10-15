@@ -17,5 +17,7 @@ namespace AI_Powered_CRM.Services.Interfaces
         Task<SupportAccessTicket> RevokeTicketAsync(Guid ticketId, string assertedRevokerUserId, string reason);
         
         Task<SupportAccessTicket?> GetTicketByIdAsync(Guid ticketId);
+        Task<System.Collections.Generic.List<SupportAccessTicket>> GetTicketsForTenantAsync(Guid tenantId);
+        Task<System.Collections.Generic.List<SupportAccessTicket>> GetAllTicketsAsync();
     }
 }

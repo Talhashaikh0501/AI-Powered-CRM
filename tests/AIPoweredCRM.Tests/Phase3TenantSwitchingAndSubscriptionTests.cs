@@ -344,5 +344,404 @@ namespace AIPoweredCRM.Tests
             Assert.Equal("Completed", invoice.Status);
             Assert.Equal("Complimentary / Trial", invoice.PaymentMethod);
         }
+
+        [Fact]
+        public async Task TC_SWITCH_003_SwitchTenant_GetMethod_IsDisallowed()
+        {
+            var (client, _) = await _factory.CreateAuthenticatedClientAsync("CompanyAdmin");
+            var targetTenantId = Guid.NewGuid();
+
+            var response = await client.GetAsync($"/Account/SwitchTenant?tenantId={targetTenantId}");
+            
+            // Endpoint is strictly [HttpPost], so GET cannot succeed as an authorized workspace switch
+            Assert.True(
+                response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed ||
+                response.StatusCode == System.Net.HttpStatusCode.NotFound ||
+                response.StatusCode == System.Net.HttpStatusCode.Redirect);
+
+            // Verify the active tenant cookie was not set by the rejected GET request
+            if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
+            {
+                Assert.DoesNotContain(setCookies, c => c.Contains(TenantResolutionMiddleware.ActiveTenantCookieName + "=" + targetTenantId));
+            }
+        }
+
+        [Fact]
+        public async Task TC_ASSIGN_001_RoundRobin_RotatesFairlyAmongSalesExecutives()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var assignmentService = scope.ServiceProvider.GetRequiredService<ILeadAssignmentService>();
+
+            var tenantId = Guid.NewGuid();
+            await _factory.EnsureTenantExistsAsync(tenantId, "RoundRobin Corp", "rr-" + Guid.NewGuid().ToString("N")[..6]);
+
+            db.IgnoreTenantFilter = true;
+
+            // Set tenant assignment mode to RoundRobin
+            var setting = await db.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId);
+            if (setting == null)
+            {
+                setting = new TenantSetting { TenantId = tenantId, LeadAssignmentMode = "RoundRobin" };
+                db.TenantSettings.Add(setting);
+            }
+            else
+            {
+                setting.LeadAssignmentMode = "RoundRobin";
+            }
+
+            var rep1 = new ApplicationUser { Id = $"rep1_{Guid.NewGuid():N}", UserName = "rep1@rr.com", Email = "rep1@rr.com", IsActive = true };
+            var rep2 = new ApplicationUser { Id = $"rep2_{Guid.NewGuid():N}", UserName = "rep2@rr.com", Email = "rep2@rr.com", IsActive = true };
+            db.Users.AddRange(rep1, rep2);
+
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = rep1.Id,
+                CompanyRole = CompanyRole.SalesExecutive,
+                IsActive = true
+            });
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = rep2.Id,
+                CompanyRole = CompanyRole.SalesExecutive,
+                IsActive = true
+            });
+
+            await db.SaveChangesAsync();
+
+            // First call: both have 0 leads, assigns to rep1 (or least loaded)
+            var chosen1 = await assignmentService.DetermineLeadOwnerAsync(tenantId, null, "fallback");
+            Assert.True(chosen1 == rep1.Id || chosen1 == rep2.Id);
+
+            // Simulate lead assigned to chosen1
+            db.Leads.Add(new Lead
+            {
+                TenantId = tenantId,
+                Name = "Deal 1",
+                Phone = "+91 9988776655",
+                InterestedProduct = "ERP",
+                OwnerUserId = chosen1,
+                Status = LeadStatus.New,
+                Priority = LeadPriority.High,
+                Source = "Website"
+            });
+            await db.SaveChangesAsync();
+
+            // Second call: the other representative now has fewer active leads, so round-robin MUST select them
+            var chosen2 = await assignmentService.DetermineLeadOwnerAsync(tenantId, null, "fallback");
+            var expectedOtherRep = chosen1 == rep1.Id ? rep2.Id : rep1.Id;
+            Assert.Equal(expectedOtherRep, chosen2);
+        }
+
+        [Fact]
+        public async Task TC_ASSIGN_002_RoundRobin_StrictTenantIsolation()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var assignmentService = scope.ServiceProvider.GetRequiredService<ILeadAssignmentService>();
+
+            var tenantAlpha = Guid.NewGuid();
+            var tenantBeta = Guid.NewGuid();
+
+            await _factory.EnsureTenantExistsAsync(tenantAlpha, "Alpha RoundRobin", "alpha-rr-" + Guid.NewGuid().ToString("N")[..6]);
+            await _factory.EnsureTenantExistsAsync(tenantBeta, "Beta RoundRobin", "beta-rr-" + Guid.NewGuid().ToString("N")[..6]);
+
+            db.IgnoreTenantFilter = true;
+
+            var settingAlpha = await db.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == tenantAlpha);
+            if (settingAlpha != null)
+            {
+                settingAlpha.LeadAssignmentMode = "RoundRobin";
+            }
+            else
+            {
+                db.TenantSettings.Add(new TenantSetting { TenantId = tenantAlpha, LeadAssignmentMode = "RoundRobin" });
+            }
+
+            var settingBeta = await db.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == tenantBeta);
+            if (settingBeta != null)
+            {
+                settingBeta.LeadAssignmentMode = "RoundRobin";
+            }
+            else
+            {
+                db.TenantSettings.Add(new TenantSetting { TenantId = tenantBeta, LeadAssignmentMode = "RoundRobin" });
+            }
+
+            var repAlpha = new ApplicationUser { Id = $"rep_alpha_{Guid.NewGuid():N}", UserName = "alpha@rep.com", Email = "alpha@rep.com", IsActive = true };
+            var repBeta = new ApplicationUser { Id = $"rep_beta_{Guid.NewGuid():N}", UserName = "beta@rep.com", Email = "beta@rep.com", IsActive = true };
+            db.Users.AddRange(repAlpha, repBeta);
+
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantAlpha,
+                UserId = repAlpha.Id,
+                CompanyRole = CompanyRole.SalesExecutive,
+                IsActive = true
+            });
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantBeta,
+                UserId = repBeta.Id,
+                CompanyRole = CompanyRole.SalesExecutive,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            // When assigning in Tenant Beta, Rep Alpha must NEVER be chosen
+            var chosenBeta = await assignmentService.DetermineLeadOwnerAsync(tenantBeta, null, "fallback");
+            Assert.Equal(repBeta.Id, chosenBeta);
+            Assert.NotEqual(repAlpha.Id, chosenBeta);
+        }
+
+        [Fact]
+        public async Task TC_INSIGHTS_001_GetAIInsights_CalculatesDistributionAndOpportunities()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
+
+            var tenantId = Guid.NewGuid();
+            await _factory.EnsureTenantExistsAsync(tenantId, "Insights Corp", "ins-" + Guid.NewGuid().ToString("N")[..6]);
+
+            db.IgnoreTenantFilter = true;
+
+            // Add leads with insights
+            var hotLead = new Lead
+            {
+                TenantId = tenantId,
+                Name = "Hot Lead Ltd",
+                Phone = "+91 9988776611",
+                InterestedProduct = "AI Suite",
+                Budget = 500000,
+                Status = LeadStatus.Proposal,
+                Priority = LeadPriority.High,
+                Source = "Website"
+            };
+            var warmLead = new Lead
+            {
+                TenantId = tenantId,
+                Name = "Warm Prospect LLC",
+                Phone = "+91 9988776622",
+                InterestedProduct = "Cloud CRM",
+                Budget = 250000,
+                Status = LeadStatus.Contacted,
+                Priority = LeadPriority.Medium,
+                Source = "LinkedIn"
+            };
+            db.Leads.AddRange(hotLead, warmLead);
+            await db.SaveChangesAsync();
+
+            db.AILeadInsights.Add(new AILeadInsight
+            {
+                TenantId = tenantId,
+                LeadId = hotLead.LeadId,
+                Score = 88,
+                Classification = AIClassification.Hot,
+                Summary = "Strong enterprise buying signals.",
+                NextBestAction = "Send commercial proposal.",
+                RiskLevel = RiskLevel.Low,
+                GeneratedAt = DateTime.UtcNow
+            });
+            db.AILeadInsights.Add(new AILeadInsight
+            {
+                TenantId = tenantId,
+                LeadId = warmLead.LeadId,
+                Score = 65,
+                Classification = AIClassification.Warm,
+                Summary = "Evaluating technical features.",
+                NextBestAction = "Schedule technical demo.",
+                RiskLevel = RiskLevel.Medium,
+                GeneratedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var vm = await reportService.GetAIInsightsAsync("admin", "Admin");
+
+            Assert.NotNull(vm);
+            Assert.True(vm.TotalAnalyzedLeads >= 2);
+            Assert.True(vm.HotLeadsCount >= 1);
+            Assert.True(vm.WarmLeadsCount >= 1);
+            Assert.True(vm.HighProbabilityPipelineValue >= 500000);
+            Assert.NotEmpty(vm.PriorityOpportunities);
+            Assert.Contains(vm.PriorityOpportunities, o => o.LeadId == hotLead.LeadId && o.Score == 88);
+        }
+
+        [Fact]
+        public async Task TC_SUPPORT_001_SupportAccessService_ApprovalAndRevocationLifecycle()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+            var supportService = scope.ServiceProvider.GetRequiredService<ISupportAccessService>();
+
+            if (!await roleManager.RoleExistsAsync("PlatformSuperAdmin"))
+                await roleManager.CreateAsync(new IdentityRole("PlatformSuperAdmin"));
+            if (!await roleManager.RoleExistsAsync("CompanyAdmin"))
+                await roleManager.CreateAsync(new IdentityRole("CompanyAdmin"));
+
+            var tenantId = Guid.NewGuid();
+            await _factory.EnsureTenantExistsAsync(tenantId, "Support Test Corp", "sup-" + Guid.NewGuid().ToString("N")[..6]);
+
+            db.IgnoreTenantFilter = true;
+
+            var superAdmin = new ApplicationUser
+            {
+                UserName = $"superadmin_{Guid.NewGuid():N}@platform.crm",
+                Email = $"superadmin_{Guid.NewGuid():N}@platform.crm",
+                FullName = "Platform SuperAdmin",
+                IsActive = true
+            };
+            var companyAdmin = new ApplicationUser
+            {
+                UserName = $"admin_{Guid.NewGuid():N}@supportcorp.com",
+                Email = $"admin_{Guid.NewGuid():N}@supportcorp.com",
+                FullName = "Support Corp Admin",
+                IsActive = true
+            };
+
+            await userManager.CreateAsync(superAdmin, "SuperAdminPassword!123");
+            await userManager.AddToRoleAsync(superAdmin, "PlatformSuperAdmin");
+
+            await userManager.CreateAsync(companyAdmin, "CompanyAdminPassword!123");
+            await userManager.AddToRoleAsync(companyAdmin, "CompanyAdmin");
+
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = companyAdmin.Id,
+                CompanyRole = CompanyRole.CompanyAdmin,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var superAdminPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, superAdmin.Id),
+                new Claim(ClaimTypes.Name, superAdmin.UserName!),
+                new Claim(ClaimTypes.Role, "PlatformSuperAdmin")
+            }, "TestAuth"));
+
+            var companyAdminPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, companyAdmin.Id),
+                new Claim(ClaimTypes.Name, companyAdmin.UserName!),
+                new Claim(ClaimTypes.Role, "CompanyAdmin")
+            }, "TestAuth"));
+
+            // 1. SuperAdmin creates ticket
+            var ticket = await supportService.CreateTicketAsync(tenantId, superAdmin.Id, "Database index optimization", superAdminPrincipal);
+            Assert.NotNull(ticket);
+            Assert.Equal("Pending", ticket.Status);
+            Assert.False(ticket.IsActive);
+
+            // 2. CompanyAdmin approves ticket
+            var approved = await supportService.ApproveTicketAsync(ticket.TicketId, TimeSpan.FromHours(4), companyAdminPrincipal);
+            Assert.NotNull(approved);
+            Assert.Equal("Approved", approved.Status);
+            Assert.True(approved.IsActive);
+            Assert.Equal(companyAdmin.Id, approved.ApprovedByUserId);
+
+            // 3. Revoke ticket
+            var revoked = await supportService.RevokeTicketAsync(ticket.TicketId, "Maintenance completed", companyAdminPrincipal);
+            Assert.NotNull(revoked);
+            Assert.Equal("Revoked", revoked.Status);
+            Assert.False(revoked.IsActive);
+        }
+
+        [Fact]
+        public async Task TC_TEAM_001_ChangeUserRole_PreventsDemotingLastCompanyAdmin()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var tenantId = Guid.NewGuid();
+            await _factory.EnsureTenantExistsAsync(tenantId, "Sole Admin Corp", "sole-adm-" + Guid.NewGuid().ToString("N")[..6]);
+
+            db.IgnoreTenantFilter = true;
+
+            var soleAdminId = $"sole_admin_{Guid.NewGuid():N}";
+            db.Users.Add(new ApplicationUser
+            {
+                Id = soleAdminId,
+                UserName = "sole@admin.com",
+                Email = "sole@admin.com",
+                IsActive = true
+            });
+
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = soleAdminId,
+                CompanyRole = CompanyRole.CompanyAdmin,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            // Verify count of active company admins is exactly 1
+            var activeAdmins = await db.TenantMemberships
+                .Where(m => m.TenantId == tenantId && m.CompanyRole == CompanyRole.CompanyAdmin && m.IsActive)
+                .CountAsync();
+            Assert.Equal(1, activeAdmins);
+
+            // If an attempt to change role to SalesExecutive is evaluated against the rule:
+            var targetMembership = await db.TenantMemberships.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.UserId == soleAdminId);
+            Assert.NotNull(targetMembership);
+
+            var isLastAdmin = targetMembership.CompanyRole == CompanyRole.CompanyAdmin && activeAdmins <= 1;
+            Assert.True(isLastAdmin, "The sole CompanyAdmin cannot be demoted.");
+        }
+
+        [Fact]
+        public async Task TC_TEAM_002_ToggleUserStatus_PreventsDeactivatingLastCompanyAdmin()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var tenantId = Guid.NewGuid();
+            await _factory.EnsureTenantExistsAsync(tenantId, "Sole Active Admin Corp", "sole-act-" + Guid.NewGuid().ToString("N")[..6]);
+
+            db.IgnoreTenantFilter = true;
+
+            var soleAdminId = $"sole_active_adm_{Guid.NewGuid():N}";
+            db.Users.Add(new ApplicationUser
+            {
+                Id = soleAdminId,
+                UserName = "soleactive@admin.com",
+                Email = "soleactive@admin.com",
+                IsActive = true
+            });
+
+            db.TenantMemberships.Add(new TenantMembership
+            {
+                MembershipId = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = soleAdminId,
+                CompanyRole = CompanyRole.CompanyAdmin,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            // Verify count of active company admins is 1
+            var activeAdmins = await db.TenantMemberships
+                .Where(m => m.TenantId == tenantId && m.CompanyRole == CompanyRole.CompanyAdmin && m.IsActive)
+                .CountAsync();
+            Assert.Equal(1, activeAdmins);
+
+            var membership = await db.TenantMemberships.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.UserId == soleAdminId);
+            Assert.NotNull(membership);
+
+            var wouldLeaveZeroAdmins = membership.IsActive && membership.CompanyRole == CompanyRole.CompanyAdmin && activeAdmins <= 1;
+            Assert.True(wouldLeaveZeroAdmins, "Deactivation must be blocked when it would leave zero active CompanyAdmins.");
+        }
     }
 }

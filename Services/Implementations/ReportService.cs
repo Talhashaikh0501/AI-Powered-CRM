@@ -8,6 +8,7 @@ using AI_Powered_CRM.DTOs;
 using AI_Powered_CRM.Models.Entities;
 using AI_Powered_CRM.Models.Enums;
 using AI_Powered_CRM.Services.Interfaces;
+using AI_Powered_CRM.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace AI_Powered_CRM.Services.Implementations
@@ -236,6 +237,88 @@ namespace AI_Powered_CRM.Services.Implementations
                 })
                 .OrderByDescending(s => s.ClosedWonDealValue)
                 .ToList();
+        }
+
+        public async Task<AIInsightsViewModel> GetAIInsightsAsync(string? currentUserId, string? role)
+        {
+            var leadQuery = _context.Leads
+                .Include(l => l.OwnerUser)
+                .Include(l => l.AIInsights)
+                .Where(l => !l.IsArchived);
+
+            if (role != "Admin" && role != "Manager")
+            {
+                leadQuery = leadQuery.Where(l => l.OwnerUserId == currentUserId);
+            }
+
+            var leads = await leadQuery.ToListAsync();
+
+            var activeLeads = leads.Where(l => l.Status != LeadStatus.Converted && l.Status != LeadStatus.Lost).ToList();
+            var totalActiveVal = activeLeads.Where(l => l.Budget.HasValue).Sum(l => l.Budget!.Value);
+
+            var scoredList = leads.Select(l =>
+            {
+                var latest = l.AIInsights.OrderByDescending(i => i.GeneratedAt).FirstOrDefault();
+                return new
+                {
+                    Lead = l,
+                    Insight = latest
+                };
+            }).ToList();
+
+            var analyzed = scoredList.Where(s => s.Insight != null).ToList();
+            var hotCount = analyzed.Count(s => s.Insight!.Classification == AIClassification.Hot);
+            var warmCount = analyzed.Count(s => s.Insight!.Classification == AIClassification.Warm);
+            var coldCount = analyzed.Count(s => s.Insight!.Classification == AIClassification.Cold);
+            var unscoredCount = scoredList.Count(s => s.Insight == null);
+
+            var highProbVal = activeLeads
+                .Where(l =>
+                {
+                    var ins = l.AIInsights.OrderByDescending(i => i.GeneratedAt).FirstOrDefault();
+                    return ins != null && (ins.Score >= 75 || ins.Classification == AIClassification.Hot) && l.Budget.HasValue;
+                })
+                .Sum(l => l.Budget!.Value);
+
+            // Fetch tenant quota
+            var tenant = await _context.Tenants.FirstOrDefaultAsync();
+
+            var priorityOpportunities = activeLeads
+                .Select(l =>
+                {
+                    var ins = l.AIInsights.OrderByDescending(i => i.GeneratedAt).FirstOrDefault();
+                    return new PriorityOpportunityDto
+                    {
+                        LeadId = l.LeadId,
+                        Name = l.Name,
+                        Company = l.Company ?? l.InterestedProduct,
+                        BudgetInr = l.Budget,
+                        Score = ins?.Score ?? 50,
+                        Classification = ins?.Classification.ToString() ?? "Unscored",
+                        NextBestAction = ins?.NextBestAction ?? "Review lead status and schedule initial discovery call.",
+                        RiskLevel = ins != null ? ins.RiskLevel.ToString() : "Low",
+                        OwnerName = l.OwnerUser?.FullName ?? l.OwnerUser?.UserName ?? "Unassigned",
+                        LastAnalyzedAt = ins?.GeneratedAt ?? l.UpdatedAt
+                    };
+                })
+                .OrderByDescending(p => p.Score)
+                .ThenByDescending(p => p.BudgetInr ?? 0)
+                .Take(12)
+                .ToList();
+
+            return new AIInsightsViewModel
+            {
+                TotalAnalyzedLeads = analyzed.Count,
+                HotLeadsCount = hotCount,
+                WarmLeadsCount = warmCount,
+                ColdLeadsCount = coldCount,
+                UnscoredLeadsCount = unscoredCount,
+                HighProbabilityPipelineValue = highProbVal,
+                TotalActivePipelineValue = totalActiveVal,
+                MonthlyAiRequestLimit = tenant?.MonthlyAiRequestLimit ?? 200,
+                CurrentMonthAiUsageCount = tenant?.CurrentMonthAiUsageCount ?? 0,
+                PriorityOpportunities = priorityOpportunities
+            };
         }
     }
 }

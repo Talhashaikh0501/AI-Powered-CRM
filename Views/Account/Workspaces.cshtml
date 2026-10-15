@@ -72,9 +72,13 @@
                     }
                     else
                     {
-                        <a asp-action="SwitchTenant" asp-route-tenantId="@ws.TenantId" class="btn btn-primary w-100 btn-sm">
-                            <i class="bi bi-arrow-repeat me-1"></i> Switch to Workspace
-                        </a>
+                        <form asp-action="SwitchTenant" method="post" class="d-inline w-100">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="tenantId" value="@ws.TenantId" />
+                            <button type="submit" class="btn btn-primary w-100 btn-sm">
+                                <i class="bi bi-arrow-repeat me-1"></i> Switch to Workspace
+                            </button>
+                        </form>
                     }
                 </div>
             </div>

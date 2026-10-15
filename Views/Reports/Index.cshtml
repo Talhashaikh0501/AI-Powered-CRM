@@ -10,7 +10,34 @@
             Deep insights into pipeline velocity, acquisition channel ROI, and sales rep performance.
         </p>
     </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Insights" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-stars me-1"></i> AI Intelligence
+        </a>
+        <a asp-action="ExportConversionCsv" class="btn btn-outline-secondary btn-sm" title="Download executive summary and channel ROI as CSV">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export Report CSV
+        </a>
+        <a asp-action="ExportLeadsCsv" class="btn btn-primary btn-sm" title="Export complete lead dataset">
+            <i class="bi bi-download me-1"></i> Export Leads CSV
+        </a>
+    </div>
 </div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
 
 <!-- Conversion Metric Cards -->
 <div class="row g-3 mb-4">

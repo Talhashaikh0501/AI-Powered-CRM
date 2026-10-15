@@ -209,6 +209,13 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser();
         policy.AddRequirements(new TenantRequirement());
     });
+
+    // Platform SuperAdmin SaaS operations policy (cross-tenant administration)
+    options.AddPolicy("PlatformSuperAdminOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole("PlatformSuperAdmin", "SuperAdmin");
+    });
 });
 
 // Resource-based & Tenant authorization handlers
@@ -233,6 +240,7 @@ builder.Services.AddScoped<IDeterministicFallbackScorer, DeterministicFallbackSc
 builder.Services.AddScoped<IAIService, GroqAIService>();
 builder.Services.AddScoped<ICompanyOnboardingService, CompanyOnboardingService>();
 builder.Services.AddScoped<ITenantInvitationService, TenantInvitationService>();
+builder.Services.AddScoped<ILeadAssignmentService, LeadAssignmentService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IFollowUpService, FollowUpService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();

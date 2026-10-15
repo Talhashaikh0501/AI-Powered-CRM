@@ -81,6 +81,10 @@ namespace AI_Powered_CRM.ViewModels
     public class AdminUsersViewModel
     {
         public List<UserWithRoleDto> Users { get; set; } = new List<UserWithRoleDto>();
+        public string? SearchTerm { get; set; }
+        public string? RoleFilter { get; set; }
+        public int ActiveUserSeats { get; set; }
+        public int MaxUserSeats { get; set; }
     }
 
     public class UserWithRoleDto
@@ -90,7 +94,9 @@ namespace AI_Powered_CRM.ViewModels
         public string FullName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
+        public AI_Powered_CRM.Models.Enums.CompanyRole CompanyRole { get; set; }
         public bool IsActive { get; set; }
+        public bool IsLastAdmin { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

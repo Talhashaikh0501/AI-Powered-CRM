@@ -1,0 +1,176 @@
+@model AI_Powered_CRM.ViewModels.SupportAccessPortalViewModel
+@{
+    ViewData["Title"] = "Delegated Support Access Portal";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h3 class="fw-bold text-dark mb-0">Delegated Customer Support Access Portal</h3>
+            <span class="badge bg-danger">Zero-Trust Protocol</span>
+        </div>
+        <p class="text-muted small mb-0">
+            Platform administrators must request explicit, audited, customer-approved access tickets to troubleshoot tenant workspaces.
+        </p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Platform Dashboard
+        </a>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row g-4 mb-4">
+    <!-- Request Support Access Form -->
+    <div class="col-lg-5">
+        <div class="crm-card p-4 h-100">
+            <h5 class="fw-bold text-dark mb-3">
+                <i class="bi bi-key-fill text-primary me-2"></i>Request Delegated Support Access
+            </h5>
+            <p class="text-muted small mb-3">
+                Submitting this request creates an audited ticket. Customer Company Administrators must approve the ticket before session escalation is granted.
+            </p>
+
+            <form asp-action="RequestSupportAccess" method="post">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Target Customer Organization</label>
+                    <select name="TenantId" class="form-select form-select-sm" required>
+                        <option value="">-- Select Company --</option>
+                        @foreach (var t in Model.AvailableTenants)
+                        {
+                            <option value="@t.TenantId">@t.CompanyName (@t.Slug)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Operational Reason & Ticket Reference</label>
+                    <textarea name="Reason" class="form-control form-control-sm" rows="3" required
+                              placeholder="e.g., Investigating webhook delivery failure reported under Support Ticket #4928..."></textarea>
+                    <small class="text-muted" style="font-size: 0.75rem;">
+                        This reason is visible to the customer organization and recorded permanently in the audit log.
+                    </small>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-send-fill me-1"></i> Submit Support Access Request
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Security Protocol Notice -->
+    <div class="col-lg-7">
+        <div class="crm-card p-4 h-100 bg-light border-start border-4 border-primary">
+            <h5 class="fw-bold text-dark mb-2">
+                <i class="bi bi-shield-lock text-primary me-2"></i>Multi-Tenant Support Access Governance
+            </h5>
+            <p class="text-muted small mb-3">
+                Our SaaS architecture enforces strict boundaries between tenant datasets. Platform SuperAdmins cannot arbitrarily read or modify private CRM data.
+            </p>
+            <ul class="small text-muted ps-3 mb-0">
+                <li class="mb-2"><strong>Time-Bound Access:</strong> Approved support sessions automatically expire after 4 hours.</li>
+                <li class="mb-2"><strong>Customer Approval:</strong> A Company Administrator from the customer workspace must explicitly grant access.</li>
+                <li class="mb-2"><strong>Dual Revocation:</strong> Either the customer admin or the platform team can immediately revoke access at any point.</li>
+                <li><strong>Immutable Audit Trail:</strong> Every query executed during a delegated support session is tagged with the ticket reference ID.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Support Access Tickets History -->
+<div class="crm-card p-4">
+    <h5 class="fw-bold text-dark mb-3">Support Access Audit & Session History</h5>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                <tr>
+                    <th class="ps-3">Ticket #</th>
+                    <th>Target Workspace</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Requested At</th>
+                    <th>Expires At</th>
+                    <th class="text-end pe-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Tickets.Any())
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-2 d-block mb-1 text-secondary"></i>
+                            No support access tickets have been requested.
+                        </td>
+                    </tr>
+                }
+                @foreach (var ticket in Model.Tickets)
+                {
+                    <tr>
+                        <td class="ps-3 font-monospace fw-bold text-dark">
+                            @ticket.TicketNumber
+                        </td>
+                        <td>
+                            <span class="fw-bold d-block text-dark">@(ticket.Tenant?.CompanyName ?? "Workspace")</span>
+                            <small class="text-muted font-monospace">@ticket.TenantId.ToString().Substring(0, 8)...</small>
+                        </td>
+                        <td style="max-width: 250px;">
+                            <span class="text-truncate d-block small" title="@ticket.Reason">@ticket.Reason</span>
+                        </td>
+                        <td>
+                            @if (ticket.IsActive)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
+                            }
+                            else if (ticket.Status == "Pending")
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pending Approval</span>
+                            }
+                            else if (ticket.Status == "Revoked")
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-slash-circle me-1"></i>Revoked</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">@ticket.Status</span>
+                            }
+                        </td>
+                        <td class="small text-muted">@ticket.CreatedAt.ToString("MMM dd, HH:mm")</td>
+                        <td class="small text-muted">@ticket.ExpiresAt.ToString("MMM dd, HH:mm")</td>
+                        <td class="text-end pe-3">
+                            @if (ticket.IsActive || ticket.Status == "Pending")
+                            {
+                                <form asp-action="RevokeSupportAccess" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="ticketId" value="@ticket.TicketId" />
+                                    <input type="hidden" name="reason" value="Cancelled by Platform SuperAdmin" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 0.75rem;">
+                                        Revoke
+                                    </button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

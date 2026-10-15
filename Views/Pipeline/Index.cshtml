@@ -11,7 +11,7 @@
         </p>
     </div>
     <div class="d-flex align-items-center gap-3">
-        <div class="crm-card px-3 py-2 d-flex align-items-center gap-2">
+        <div class="crm-card px-3 py-2 d-flex align-items-center gap-2 shadow-sm bg-white">
             <span class="text-muted small">Active Pipeline:</span>
             <span class="fw-bold text-success fs-6">@AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(Model.TotalActivePipelineValue)</span>
             <span class="badge bg-light text-dark border">@Model.TotalActiveDealsCount Deals</span>
@@ -24,6 +24,19 @@
 
 @Html.AntiForgeryToken()
 
+<!-- Toast for drag updates -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+    <div id="kanbanToast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body d-flex align-items-center gap-2" id="kanbanToastBody">
+                <i class="bi bi-check-circle-fill"></i>
+                <span id="kanbanToastMessage">Stage updated successfully</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
 <!-- Kanban Columns Container (Horizontal Scroll) -->
 <div class="d-flex gap-3 overflow-auto pb-4" style="min-height: 75vh;">
     @foreach (var stage in Model.Stages)
@@ -34,8 +47,8 @@
         var isWon = stage.Key == LeadStatus.Converted;
         var isLost = stage.Key == LeadStatus.Lost;
 
-        <div class="kanban-column d-flex flex-column rounded-3 p-2 bg-light border" 
-             style="min-width: 290px; max-width: 310px; flex-shrink: 0; background-color: #f1f5f9 !important;">
+        <div class="kanban-column d-flex flex-column rounded-3 p-2 border" 
+             style="min-width: 300px; max-width: 320px; flex-shrink: 0; background-color: #f8fafc !important;">
             <!-- Column Header -->
             <div class="d-flex justify-content-between align-items-center p-2 mb-2 bg-white rounded-2 shadow-sm border">
                 <div>
@@ -44,45 +57,69 @@
                         @AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(stageVal)
                     </span>
                 </div>
-                <span class="badge @(isWon ? "bg-success" : (isLost ? "bg-danger" : "bg-secondary")) rounded-pill">
+                <span class="badge @(isWon ? "bg-success" : (isLost ? "bg-danger" : "bg-primary")) rounded-pill px-2">
                     @stageLeads.Count
                 </span>
             </div>
 
             <!-- Draggable Cards Container -->
             <div class="kanban-cards-list d-flex flex-column gap-2 flex-grow-1 overflow-auto" 
-                 data-stage="@stage.Key" id="stage-@stage.Key" style="min-height: 200px;">
+                 data-stage="@stage.Key" id="stage-@stage.Key" style="min-height: 250px;">
                 @foreach (var lead in stageLeads)
                 {
-                    var latestAi = lead.AIInsights.OrderByDescending(i => i.GeneratedAt).FirstOrDefault();
+                    var latestAi = lead.AIInsights?.OrderByDescending(i => i.GeneratedAt).FirstOrDefault();
                     var score = latestAi?.Score ?? 0;
                     var aiClass = latestAi?.Classification.ToString() ?? "Warm";
+                    var ownerInitials = !string.IsNullOrWhiteSpace(lead.OwnerUser?.FullName)
+                        ? lead.OwnerUser.FullName.Substring(0, 1).ToUpper()
+                        : (!string.IsNullOrWhiteSpace(lead.OwnerUser?.UserName) ? lead.OwnerUser.UserName.Substring(0, 1).ToUpper() : "?");
 
-                    <div class="kanban-card crm-card p-3 shadow-sm bg-white" data-lead-id="@lead.LeadId" style="cursor: grab;">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <span class="badge @(aiClass == "Hot" ? "badge-hot" : (aiClass == "Warm" ? "badge-warm" : "badge-cold"))" style="font-size: 0.68rem;">
-                                @aiClass (@score)
-                            </span>
+                    var pendingFollowUps = lead.FollowUps?.Where(f => f.Status == AI_Powered_CRM.Models.Enums.FollowUpStatus.Pending).OrderBy(f => f.DueAt).ToList() ?? new List<AI_Powered_CRM.Models.Entities.FollowUp>();
+                    var nextFollowUp = pendingFollowUps.FirstOrDefault();
+                    var isOverdue = nextFollowUp != null && nextFollowUp.DueAt < DateTime.UtcNow;
+
+                    <div class="kanban-card crm-card p-3 shadow-sm bg-white" data-lead-id="@lead.LeadId" style="cursor: grab; transition: transform 0.15s ease, box-shadow 0.15s ease;">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="badge @(aiClass == "Hot" ? "badge-hot" : (aiClass == "Warm" ? "badge-warm" : "badge-cold"))" style="font-size: 0.68rem;">
+                                    <i class="bi bi-stars me-1"></i>@aiClass (@score)
+                                </span>
+                                <span class="badge @(lead.Priority == LeadPriority.High ? "bg-danger" : (lead.Priority == LeadPriority.Medium ? "bg-warning text-dark" : "bg-light text-muted border"))" style="font-size: 0.65rem;">
+                                    @lead.Priority
+                                </span>
+                            </div>
                             <span class="fw-bold text-success small">
-                                @(lead.Budget.HasValue ? AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(lead.Budget.Value) : "No budget")
+                                @(lead.Budget.HasValue ? AI_Powered_CRM.Helpers.CurrencyHelper.FormatINRRounded(lead.Budget.Value) : "₹0")
                             </span>
                         </div>
 
-                        <a asp-controller="Leads" asp-action="Details" asp-route-id="@lead.LeadId" class="fw-bold text-dark text-decoration-none d-block small mb-1">
+                        <a asp-controller="Leads" asp-action="Details" asp-route-id="@lead.LeadId" class="fw-bold text-dark text-decoration-none d-block small mb-1 hover-primary">
                             @lead.Name
                         </a>
                         <div class="text-muted text-xs text-truncate mb-2" style="font-size: 0.75rem;">
                             @(lead.Company ?? lead.InterestedProduct)
                         </div>
 
+                        @if (nextFollowUp != null)
+                        {
+                            <div class="mb-2">
+                                <span class="badge @(isOverdue ? "bg-danger bg-opacity-10 text-danger border border-danger-subtle" : "bg-warning bg-opacity-10 text-dark border border-warning-subtle") d-inline-flex align-items-center gap-1" style="font-size: 0.68rem;">
+                                    <i class="bi @(isOverdue ? "bi-exclamation-circle-fill text-danger" : "bi-clock-fill text-warning")"></i>
+                                    <span>Follow-up: @nextFollowUp.DueAt.ToString("MMM dd")</span>
+                                </span>
+                            </div>
+                        }
+
                         <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-1">
-                            <div class="d-flex align-items-center gap-1 text-muted" style="font-size: 0.72rem;">
-                                <i class="bi bi-person text-secondary"></i>
-                                <span class="text-truncate" style="max-width: 100px;">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="user-avatar-badge" style="width: 24px; height: 24px; font-size: 0.7rem;" title="@(lead.OwnerUser?.FullName ?? lead.OwnerUser?.UserName ?? "Unassigned")">
+                                    @ownerInitials
+                                </div>
+                                <span class="text-muted text-truncate" style="font-size: 0.72rem; max-width: 100px;">
                                     @(lead.OwnerUser?.FullName ?? lead.OwnerUser?.UserName ?? "Unassigned")
                                 </span>
                             </div>
-                            <a asp-controller="Leads" asp-action="Details" asp-route-id="@lead.LeadId" class="btn btn-xs btn-outline-primary py-0 px-1" style="font-size: 0.7rem;">
+                            <a asp-controller="Leads" asp-action="Details" asp-route-id="@lead.LeadId" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size: 0.72rem;">
                                 View &rarr;
                             </a>
                         </div>
@@ -98,6 +135,18 @@
         document.addEventListener('DOMContentLoaded', function () {
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
             const columns = document.querySelectorAll('.kanban-cards-list');
+            const toastEl = document.getElementById('kanbanToast');
+            const toastBody = document.getElementById('kanbanToastBody');
+            const toastMsg = document.getElementById('kanbanToastMessage');
+            const bsToast = toastEl ? new bootstrap.Toast(toastEl, { delay: 3500 }) : null;
+
+            function showToast(message, isSuccess) {
+                if (!bsToast) return;
+                toastEl.classList.remove('bg-success', 'bg-danger');
+                toastEl.classList.add(isSuccess ? 'bg-success' : 'bg-danger');
+                toastMsg.textContent = message;
+                bsToast.show();
+            }
 
             columns.forEach(col => {
                 new Sortable(col, {
@@ -108,6 +157,8 @@
                         const itemEl = evt.item;
                         const leadId = itemEl.getAttribute('data-lead-id');
                         const newStage = evt.to.getAttribute('data-stage');
+                        const originalColumn = evt.from;
+                        const originalIndex = evt.oldIndex;
 
                         if (evt.from !== evt.to) {
                             fetch('/Pipeline/MoveStage', {
@@ -122,16 +173,33 @@
                                     notes: 'Moved via Kanban drag-and-drop'
                                 })
                             })
-                            .then(res => res.json())
+                            .then(res => {
+                                if (!res.ok) {
+                                    throw new Error('Server returned ' + res.status);
+                                }
+                                return res.json();
+                            })
                             .then(data => {
-                                if (!data.success) {
-                                    alert('Failed to update stage. Reverting...');
-                                    location.reload();
+                                if (data && data.success) {
+                                    showToast('Deal moved to ' + newStage, true);
+                                } else {
+                                    showToast(data.message || 'Permission denied or update failed. Reverting...', false);
+                                    // Revert card back to original column
+                                    if (originalIndex >= originalColumn.children.length) {
+                                        originalColumn.appendChild(itemEl);
+                                    } else {
+                                        originalColumn.insertBefore(itemEl, originalColumn.children[originalIndex]);
+                                    }
                                 }
                             })
                             .catch(err => {
-                                console.error(err);
-                                location.reload();
+                                console.error('Kanban move error:', err);
+                                showToast('Network or server error. Reverting deal position.', false);
+                                if (originalIndex >= originalColumn.children.length) {
+                                    originalColumn.appendChild(itemEl);
+                                } else {
+                                    originalColumn.insertBefore(itemEl, originalColumn.children[originalIndex]);
+                                }
                             });
                         }
                     }

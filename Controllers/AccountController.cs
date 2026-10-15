@@ -287,10 +287,11 @@ namespace AI_Powered_CRM.Controllers
         }
 
         // -------------------------------------------------------
-        // GET /Account/SwitchTenant?tenantId=...&returnUrl=...
+        // POST /Account/SwitchTenant
         // -------------------------------------------------------
-        [HttpGet]
+        [HttpPost]
         [Authorize]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> SwitchTenant(Guid tenantId, string? returnUrl = null)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
