@@ -105,11 +105,24 @@ try {
     }
 
     if ($mismatches -gt 0) {
+        $cmd.CommandText = "UPDATE dbo.TalhaCRM_BKP_SnapshotMetadata SET Status = 'Failed' WHERE SnapshotSuffix = @suffix"
+        $cmd.Parameters.Clear()
+        $p = $cmd.Parameters.Add("@suffix", [System.Data.SqlDbType]::NVarChar, 50)
+        $p.Value = $snapshotSuffix
+        $cmd.ExecuteNonQuery() | Out-Null
+
         Write-Error "CRITICAL: Snapshot verification failed with $mismatches errors! Aborting migration before EF Core execution."
         exit 1
     }
 
-    Write-Output "  -> All pre-migration snapshots verified 100% byte-and-row accurate."
+    # Mark as Verified ONLY after row counts match 100% across all tables
+    $cmd.CommandText = "UPDATE dbo.TalhaCRM_BKP_SnapshotMetadata SET Status = 'Verified' WHERE SnapshotSuffix = @suffix"
+    $cmd.Parameters.Clear()
+    $p = $cmd.Parameters.Add("@suffix", [System.Data.SqlDbType]::NVarChar, 50)
+    $p.Value = $snapshotSuffix
+    $cmd.ExecuteNonQuery() | Out-Null
+
+    Write-Output "  -> All pre-migration snapshots verified 100% byte-and-row accurate (Status: 'Verified')."
 
 } catch {
     Write-Error "CRITICAL: Pre-migration snapshot failed! Aborting without modifying any tables: $_"

@@ -32,7 +32,7 @@ namespace AIPoweredCRM.Tests
         public Task InitializeAsync()
         {
             _dbOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseSqlServer(_connectionString)
+                .UseSqlServer(_connectionString, x => x.MigrationsHistoryTable("TalhaCRM_EFMigrationsHistory"))
                 .Options;
 
             return Task.CompletedTask;
@@ -306,6 +306,226 @@ namespace AIPoweredCRM.Tests
             {
                 var leads = await secondDb.Leads.ToListAsync();
                 Assert.Empty(leads);
+            }
+        }
+
+        [Fact]
+        public async Task TC_MIG_002_Snapshot_Verification_And_Dual_Phase_Recovery_Integrity()
+        {
+            var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null && !System.IO.File.Exists(System.IO.Path.Combine(dir.FullName, "AI_Powered_CRM.sln")))
+            {
+                dir = dir.Parent;
+            }
+            Assert.NotNull(dir);
+            var projectRoot = dir.FullName;
+            var createSnapshotPath = System.IO.Path.Combine(projectRoot, "scripts", "create_indb_snapshots.sql");
+            var restoreSnapshotPath = System.IO.Path.Combine(projectRoot, "scripts", "restore_from_indb_snapshots.sql");
+
+            Assert.True(System.IO.File.Exists(createSnapshotPath), $"Missing {createSnapshotPath}");
+            Assert.True(System.IO.File.Exists(restoreSnapshotPath), $"Missing {restoreSnapshotPath}");
+
+            // Step 1: Migrate up to Phase 1 Baseline
+            using (var baselineContext = CreateDbContext())
+            {
+                var migrator = baselineContext.Database.GetService<IMigrator>();
+                await migrator.MigrateAsync("20261013032739_InitialCrmBaseline");
+            }
+
+            // Step 2: Seed Phase 1 baseline data
+            using (var sqlConn = new SqlConnection(_connectionString))
+            {
+                await sqlConn.OpenAsync();
+
+                using var seedCmd = sqlConn.CreateCommand();
+                seedCmd.CommandText = @"
+                    INSERT INTO TalhaCRM_AspNetRoles (Id, Name, NormalizedName, ConcurrencyStamp) VALUES
+                    ('role-admin', 'Admin', 'ADMIN', NEWID()),
+                    ('role-manager', 'Manager', 'MANAGER', NEWID()),
+                    ('role-sales', 'SalesExecutive', 'SALESEXECUTIVE', NEWID());
+
+                    INSERT INTO TalhaCRM_AspNetUsers (Id, FullName, CreatedAt, IsActive, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount) VALUES
+                    ('user-admin', 'Admin User', SYSUTCDATETIME(), 1, 'admin@test.local', 'ADMIN@TEST.LOCAL', 'admin@test.local', 'ADMIN@TEST.LOCAL', 1, 0, 0, 0, 0),
+                    ('user-sales', 'Sales User', SYSUTCDATETIME(), 1, 'sales@test.local', 'SALES@TEST.LOCAL', 'sales@test.local', 'SALES@TEST.LOCAL', 1, 0, 0, 0, 0);
+
+                    INSERT INTO TalhaCRM_AspNetUserRoles (UserId, RoleId) VALUES
+                    ('user-admin', 'role-admin'),
+                    ('user-sales', 'role-sales');
+
+                    INSERT INTO TalhaCRM_Leads (Name, Email, Phone, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt) VALUES
+                    ('Alpha Corp', 'alpha@corp.local', '+91 91111 22222', 'Alpha Corp', 'Web', 'CRM', 40000.00, 'New', 'High', 'user-admin', 0, SYSUTCDATETIME(), SYSUTCDATETIME()),
+                    ('Beta Ltd', 'beta@ltd.local', '+91 93333 44444', 'Beta Ltd', 'Referral', 'Cloud', 60000.00, 'Contacted', 'Medium', 'user-sales', 0, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                    DECLARE @AlphaLeadId int = (SELECT TOP 1 LeadId FROM TalhaCRM_Leads WHERE Name = 'Alpha Corp');
+
+                    INSERT INTO TalhaCRM_LeadActivities (LeadId, UserId, Type, Description, OccurredAt) VALUES
+                    (@AlphaLeadId, 'user-admin', 'Call', 'Alpha kickoff call', SYSUTCDATETIME());
+
+                    INSERT INTO TalhaCRM_FollowUps (LeadId, AssignedUserId, Type, Notes, Status, DueAt) VALUES
+                    (@AlphaLeadId, 'user-admin', 'Call', 'Alpha follow up', 'Pending', DATEADD(day, 1, SYSUTCDATETIME()));
+
+                    INSERT INTO TalhaCRM_AILeadInsights (LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, Provider, Model, GeneratedAt) VALUES
+                    (@AlphaLeadId, 'Warm', 75, 'Solid opportunity', 'Send quote', 'Low', 'Medium', '{}', 'Groq', 'llama-3.3-70b-versatile', SYSUTCDATETIME());
+
+                    INSERT INTO TalhaCRM_Notifications (UserId, LeadId, Title, Message, IsRead, CreatedAt) VALUES
+                    ('user-admin', @AlphaLeadId, 'Kickoff alert', 'Kickoff completed', 0, SYSUTCDATETIME());
+
+                    INSERT INTO TalhaCRM_AuditLogs (UserId, Action, EntityType, EntityId, DetailsJson, CreatedAt) VALUES
+                    ('user-admin', 'Create', 'Lead', CAST(@AlphaLeadId AS nvarchar(50)), '{}', SYSUTCDATETIME());
+                ";
+                await seedCmd.ExecuteNonQueryAsync();
+
+                // Step 3: Run create_indb_snapshots.sql
+                var snapshotSql = await System.IO.File.ReadAllTextAsync(createSnapshotPath);
+                using var snapCmd = sqlConn.CreateCommand();
+                snapCmd.CommandText = snapshotSql;
+                var snapshotSuffixObj = await snapCmd.ExecuteScalarAsync();
+                Assert.NotNull(snapshotSuffixObj);
+                var snapshotSuffix = snapshotSuffixObj.ToString()!;
+                Assert.False(string.IsNullOrWhiteSpace(snapshotSuffix));
+
+                // 3.1 Verify status is PendingVerification initially
+                using var checkCmd = sqlConn.CreateCommand();
+                checkCmd.CommandText = "SELECT Status FROM dbo.TalhaCRM_BKP_SnapshotMetadata WHERE SnapshotSuffix = @suffix";
+                checkCmd.Parameters.AddWithValue("@suffix", snapshotSuffix);
+                var status = (string)(await checkCmd.ExecuteScalarAsync())!;
+                Assert.Equal("PendingVerification", status);
+
+                // 3.2 Verify row counts match before marking Verified
+                checkCmd.CommandText = $"SELECT COUNT(*) FROM dbo.TalhaCRM_BKP_{snapshotSuffix}_Leads";
+                var bkpLeadCount = (int)(await checkCmd.ExecuteScalarAsync())!;
+                Assert.Equal(2, bkpLeadCount);
+
+                checkCmd.CommandText = $"SELECT COUNT(*) FROM dbo.TalhaCRM_BKP_{snapshotSuffix}_AspNetUsers";
+                var bkpUserCount = (int)(await checkCmd.ExecuteScalarAsync())!;
+                Assert.Equal(2, bkpUserCount);
+
+                // Update to Verified (matching apply_phase2_migration.ps1 Step 2 behavior)
+                checkCmd.CommandText = "UPDATE dbo.TalhaCRM_BKP_SnapshotMetadata SET Status = 'Verified' WHERE SnapshotSuffix = @suffix";
+                await checkCmd.ExecuteNonQueryAsync();
+            }
+
+            // Step 4: Apply Phase 2 Migration
+            using (var migrationContext = CreateDbContext())
+            {
+                var migrator = migrationContext.Database.GetService<IMigrator>();
+                await migrator.MigrateAsync("20261015164702_Phase2MultiTenantCore");
+            }
+
+            var primaryTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+            // Verify Phase 2 schema is active
+            using (var verifyContext = CreateDbContext())
+            {
+                verifyContext.IgnoreTenantFilter = true;
+                Assert.Equal(2, await verifyContext.Leads.CountAsync());
+                Assert.Equal(2, await verifyContext.Users.CountAsync());
+                Assert.Equal(2, await verifyContext.TenantMemberships.CountAsync());
+            }
+
+            // Step 5: Test Recovery Process on Phase 2 Database
+            using (var sqlConn = new SqlConnection(_connectionString))
+            {
+                await sqlConn.OpenAsync();
+
+                // Read snapshot suffix
+                using var getSuffixCmd = sqlConn.CreateCommand();
+                getSuffixCmd.CommandText = "SELECT TOP 1 SnapshotSuffix FROM dbo.TalhaCRM_BKP_SnapshotMetadata ORDER BY SnapshotId DESC";
+                var snapshotSuffix = (string)(await getSuffixCmd.ExecuteScalarAsync())!;
+
+                // Mutate/add records in Phase 2 to simulate partial or failed state
+                using var mutateCmd = sqlConn.CreateCommand();
+                mutateCmd.CommandText = @"
+                    INSERT INTO TalhaCRM_Leads (Name, Email, Phone, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt, TenantId)
+                    VALUES ('Corrupted Unwanted Lead', 'corrupt@bad.local', '+91 99999 00000', 'Bad Corp', 'Web', 'None', 100.00, 'New', 'Low', 'user-admin', 0, SYSUTCDATETIME(), SYSUTCDATETIME(), '11111111-1111-1111-1111-111111111111');
+                ";
+                await mutateCmd.ExecuteNonQueryAsync();
+
+                // Test Safety Abort without @CONFIRM_RESTORE
+                var restoreScriptRaw = await System.IO.File.ReadAllTextAsync(restoreSnapshotPath);
+                using var failCmd = sqlConn.CreateCommand();
+                failCmd.CommandText = restoreScriptRaw.Replace("@SnapshotSuffix NVARCHAR(50) = '';", $"@SnapshotSuffix NVARCHAR(50) = '{snapshotSuffix}';");
+                var ex = await Assert.ThrowsAsync<SqlException>(() => failCmd.ExecuteNonQueryAsync());
+                Assert.Contains("SAFETY ABORT", ex.Message);
+
+                // Execute authorized recovery on Phase 2 schema
+                using var restoreCmd = sqlConn.CreateCommand();
+                var authorizedRestoreScript = restoreScriptRaw
+                    .Replace("@CONFIRM_RESTORE VARCHAR(50) = 'NO';", "@CONFIRM_RESTORE VARCHAR(50) = 'YES_RESTORE_TALHACRM_TABLES';")
+                    .Replace("@SnapshotSuffix NVARCHAR(50) = '';", $"@SnapshotSuffix NVARCHAR(50) = '{snapshotSuffix}';");
+
+                restoreCmd.CommandText = authorizedRestoreScript;
+                await restoreCmd.ExecuteNonQueryAsync();
+
+                // Verify DBCC CHECKCONSTRAINTS passes with zero violations
+                using var checkFkCmd = sqlConn.CreateCommand();
+                checkFkCmd.CommandText = "DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS;";
+                using var fkReader = await checkFkCmd.ExecuteReaderAsync();
+                Assert.False(await fkReader.ReadAsync(), "Foreign key check detected integrity violations!");
+            }
+
+            // Step 6: Verify Data and Schema Integrity after Phase 2 Recovery
+            using (var postRecoveryContext = CreateDbContext())
+            {
+                postRecoveryContext.IgnoreTenantFilter = true;
+
+                // 6.1 Users are preserved without ID or hash destruction
+                var users = await postRecoveryContext.Users.OrderBy(u => u.Id).ToListAsync();
+                Assert.Equal(2, users.Count);
+                Assert.Equal("user-admin", users[0].Id);
+                Assert.Equal("user-sales", users[1].Id);
+
+                // 6.2 Memberships are intact
+                var memberships = await postRecoveryContext.TenantMemberships.ToListAsync();
+                Assert.Equal(2, memberships.Count);
+                Assert.All(memberships, m => Assert.Equal(primaryTenantId, m.TenantId));
+
+                // 6.3 Leads restored exactly to 2 snapshot leads (the corrupted lead is gone!)
+                var leads = await postRecoveryContext.Leads.OrderBy(l => l.Name).ToListAsync();
+                Assert.Equal(2, leads.Count);
+                Assert.Equal("Alpha Corp", leads[0].Name);
+                Assert.Equal("Beta Ltd", leads[1].Name);
+                Assert.All(leads, l => Assert.Equal(primaryTenantId, l.TenantId));
+
+                // 6.4 Activities, Followups, Insights, Notifications, Audits restored
+                Assert.Equal(1, await postRecoveryContext.LeadActivities.CountAsync());
+                Assert.Equal(1, await postRecoveryContext.FollowUps.CountAsync());
+                Assert.Equal(1, await postRecoveryContext.AILeadInsights.CountAsync());
+                Assert.Equal(1, await postRecoveryContext.Notifications.CountAsync());
+                Assert.Equal(1, await postRecoveryContext.AuditLogs.CountAsync());
+            }
+
+            // Step 7: Test Recovery on Phase 1 Rolled-back Schema
+            using (var rollbackContext = CreateDbContext())
+            {
+                var migrator = rollbackContext.Database.GetService<IMigrator>();
+                await migrator.MigrateAsync("20261013032739_InitialCrmBaseline");
+            }
+
+            using (var sqlConn = new SqlConnection(_connectionString))
+            {
+                await sqlConn.OpenAsync();
+
+                using var getSuffixCmd = sqlConn.CreateCommand();
+                getSuffixCmd.CommandText = "SELECT TOP 1 SnapshotSuffix FROM dbo.TalhaCRM_BKP_SnapshotMetadata ORDER BY SnapshotId DESC";
+                var snapshotSuffix = (string)(await getSuffixCmd.ExecuteScalarAsync())!;
+
+                var restoreScriptRaw = await System.IO.File.ReadAllTextAsync(restoreSnapshotPath);
+                var authorizedRestoreScript = restoreScriptRaw
+                    .Replace("@CONFIRM_RESTORE VARCHAR(50) = 'NO';", "@CONFIRM_RESTORE VARCHAR(50) = 'YES_RESTORE_TALHACRM_TABLES';")
+                    .Replace("@SnapshotSuffix NVARCHAR(50) = '';", $"@SnapshotSuffix NVARCHAR(50) = '{snapshotSuffix}';");
+
+                using var restoreCmd = sqlConn.CreateCommand();
+                restoreCmd.CommandText = authorizedRestoreScript;
+                await restoreCmd.ExecuteNonQueryAsync();
+
+                // Verify row counts in Phase 1 baseline schema
+                using var countCmd = sqlConn.CreateCommand();
+                countCmd.CommandText = "SELECT (SELECT COUNT(*) FROM TalhaCRM_Leads), (SELECT COUNT(*) FROM TalhaCRM_AspNetUsers);";
+                using var reader = await countCmd.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                Assert.Equal(2, reader.GetInt32(0));
+                Assert.Equal(2, reader.GetInt32(1));
             }
         }
     }

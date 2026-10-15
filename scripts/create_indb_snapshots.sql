@@ -4,6 +4,9 @@
 -- Creates timestamped, immutable backup tables: dbo.TalhaCRM_BKP_<timestamp>_<table_name>
 -- Existing backups are NEVER dropped or overwritten.
 -- Compatible with SqlCommand.ExecuteNonQuery() (NO 'GO' batch separators).
+--
+-- NOTE: Snapshots are initialized with Status = 'PendingVerification'.
+-- They are only marked as 'Verified' after row-count verification succeeds.
 -- =============================================================================
 
 BEGIN TRANSACTION;
@@ -37,23 +40,32 @@ SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_AuditLogs FROM dbo.Talha
 SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_AspNetUsers FROM dbo.TalhaCRM_AspNetUsers;
 SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_AspNetRoles FROM dbo.TalhaCRM_AspNetRoles;
 SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_AspNetUserRoles FROM dbo.TalhaCRM_AspNetUserRoles;
-SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_EFMigrationsHistory FROM dbo.TalhaCRM_EFMigrationsHistory;
 ';
+
+IF OBJECT_ID('dbo.TalhaCRM_EFMigrationsHistory') IS NOT NULL
+BEGIN
+    SET @sql += N'SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_EFMigrationsHistory FROM dbo.TalhaCRM_EFMigrationsHistory; ';
+END
+ELSE IF OBJECT_ID('dbo.__EFMigrationsHistory') IS NOT NULL
+BEGIN
+    SET @sql += N'SELECT * INTO dbo.TalhaCRM_BKP_' + @snapshotSuffix + N'_EFMigrationsHistory FROM dbo.__EFMigrationsHistory; ';
+END;
+
 EXEC sp_executesql @sql;
 
--- 4. Record snapshot creation in a dedicated metadata audit log table if not existing
+-- 4. Record snapshot creation in a dedicated metadata audit log table with Status = 'PendingVerification'
 IF OBJECT_ID('dbo.TalhaCRM_BKP_SnapshotMetadata') IS NULL
 BEGIN
     CREATE TABLE dbo.TalhaCRM_BKP_SnapshotMetadata (
         SnapshotId INT IDENTITY(1,1) PRIMARY KEY,
         SnapshotSuffix NVARCHAR(50) NOT NULL,
         CreatedAtUtc DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-        Status NVARCHAR(50) NOT NULL DEFAULT 'Created'
+        Status NVARCHAR(50) NOT NULL DEFAULT 'PendingVerification'
     );
 END;
 
 INSERT INTO dbo.TalhaCRM_BKP_SnapshotMetadata (SnapshotSuffix, CreatedAtUtc, Status)
-VALUES (@snapshotSuffix, SYSUTCDATETIME(), 'Verified');
+VALUES (@snapshotSuffix, SYSUTCDATETIME(), 'PendingVerification');
 
 COMMIT TRANSACTION;
 
