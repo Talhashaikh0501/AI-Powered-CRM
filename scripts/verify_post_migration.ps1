@@ -3,6 +3,7 @@
 # Returns EXIT CODE 0 on complete success, EXIT CODE 1 on ANY failure.
 # =============================================================================
 
+$ErrorActionPreference = "Stop"
 $connStr = "Server=A2NWPLSK14SQL-v01.shr.prod.iad2.secureserver.net;Database=AITStudentDB;User Id=AITStudent;Password=Monitor@2026;Encrypt=True;TrustServerCertificate=True;"
 
 $failedChecks = 0
