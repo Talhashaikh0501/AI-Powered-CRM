@@ -14,8 +14,9 @@
 -- 5. Preserves Identity Users and Roles without deleting user records, avoiding
 --    foreign-key violations or cascade deletion of memberships/claims/logins.
 -- 6. Preserves and verifies TenantMemberships and TenantSettings dependencies.
--- 7. Targets ONLY dbo.TalhaCRM_* tables and NEVER touches any unrelated shared tables.
--- 8. No 'GO' batch separators; safe for both SSMS and ADO.NET execution.
+-- 7. Targets ONLY TalhaCRM_* tables and NEVER touches any unrelated shared tables.
+-- 8. Dynamically resolves user schema (AITStudent / dbo).
+-- 9. No 'GO' batch separators; safe for both SSMS and ADO.NET execution.
 -- =============================================================================
 
 DECLARE @CONFIRM_RESTORE VARCHAR(50) = 'NO'; -- MUST be explicitly set to 'YES_RESTORE_TALHACRM_TABLES'
@@ -33,17 +34,19 @@ BEGIN
     RETURN;
 END;
 
+DECLARE @schema NVARCHAR(128) = SCHEMA_NAME();
+
 -- Pre-flight validation: Verify snapshot tables exist before altering anything
 DECLARE @missingCount INT = 0;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_Leads') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_LeadActivities') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_FollowUps') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_AILeadInsights') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_Notifications') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_AuditLogs') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_AspNetUsers') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_AspNetRoles') IS NULL SET @missingCount += 1;
-IF OBJECT_ID('dbo.TalhaCRM_BKP_' + @SnapshotSuffix + '_AspNetUserRoles') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_Leads]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_LeadActivities]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_FollowUps]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_AILeadInsights]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_Notifications]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_AuditLogs]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_AspNetUsers]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_AspNetRoles]') IS NULL SET @missingCount += 1;
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_BKP_' + @SnapshotSuffix + '_AspNetUserRoles]') IS NULL SET @missingCount += 1;
 
 IF @missingCount > 0
 BEGIN
@@ -59,16 +62,16 @@ SET XACT_ABORT ON;
 -- =============================================================================
 DECLARE @syncIdentitySql NVARCHAR(MAX) = N'
 -- 1. Ensure Roles from snapshot exist
-INSERT INTO dbo.TalhaCRM_AspNetRoles (Id, Name, NormalizedName, ConcurrencyStamp)
+INSERT INTO [' + @schema + N'].[TalhaCRM_AspNetRoles] (Id, Name, NormalizedName, ConcurrencyStamp)
 SELECT b.Id, b.Name, b.NormalizedName, b.ConcurrencyStamp
-FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetRoles b
-WHERE NOT EXISTS (SELECT 1 FROM dbo.TalhaCRM_AspNetRoles r WHERE r.Id = b.Id);
+FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetRoles] b
+WHERE NOT EXISTS (SELECT 1 FROM [' + @schema + N'].[TalhaCRM_AspNetRoles] r WHERE r.Id = b.Id);
 
 -- 2. Ensure Users from snapshot exist (Insert missing)
-INSERT INTO dbo.TalhaCRM_AspNetUsers (Id, FullName, CreatedAt, IsActive, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash, SecurityStamp, ConcurrencyStamp, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount)
+INSERT INTO [' + @schema + N'].[TalhaCRM_AspNetUsers] (Id, FullName, CreatedAt, IsActive, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash, SecurityStamp, ConcurrencyStamp, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount)
 SELECT b.Id, b.FullName, b.CreatedAt, b.IsActive, b.UserName, b.NormalizedUserName, b.Email, b.NormalizedEmail, b.EmailConfirmed, b.PasswordHash, b.SecurityStamp, b.ConcurrencyStamp, b.PhoneNumber, b.PhoneNumberConfirmed, b.TwoFactorEnabled, b.LockoutEnd, b.LockoutEnabled, b.AccessFailedCount
-FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetUsers b
-WHERE NOT EXISTS (SELECT 1 FROM dbo.TalhaCRM_AspNetUsers u WHERE u.Id = b.Id);
+FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetUsers] b
+WHERE NOT EXISTS (SELECT 1 FROM [' + @schema + N'].[TalhaCRM_AspNetUsers] u WHERE u.Id = b.Id);
 
 -- 3. Synchronize User core attributes from snapshot without deleting user rows
 UPDATE u
@@ -82,14 +85,14 @@ SET u.FullName = b.FullName,
     u.PasswordHash = b.PasswordHash,
     u.SecurityStamp = b.SecurityStamp,
     u.ConcurrencyStamp = b.ConcurrencyStamp
-FROM dbo.TalhaCRM_AspNetUsers u
-JOIN dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetUsers b ON u.Id = b.Id;
+FROM [' + @schema + N'].[TalhaCRM_AspNetUsers] u
+JOIN [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetUsers] b ON u.Id = b.Id;
 
 -- 4. Ensure User-Role mappings exist
-INSERT INTO dbo.TalhaCRM_AspNetUserRoles (UserId, RoleId)
+INSERT INTO [' + @schema + N'].[TalhaCRM_AspNetUserRoles] (UserId, RoleId)
 SELECT b.UserId, b.RoleId
-FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetUserRoles b
-WHERE NOT EXISTS (SELECT 1 FROM dbo.TalhaCRM_AspNetUserRoles ur WHERE ur.UserId = b.UserId AND ur.RoleId = b.RoleId);
+FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AspNetUserRoles] b
+WHERE NOT EXISTS (SELECT 1 FROM [' + @schema + N'].[TalhaCRM_AspNetUserRoles] ur WHERE ur.UserId = b.UserId AND ur.RoleId = b.RoleId);
 ';
 EXEC sp_executesql @syncIdentitySql;
 
@@ -98,174 +101,182 @@ EXEC sp_executesql @syncIdentitySql;
 -- =============================================================================
 DECLARE @primaryTenantId UNIQUEIDENTIFIER = '11111111-1111-1111-1111-111111111111';
 
-IF OBJECT_ID('dbo.TalhaCRM_Tenants') IS NOT NULL
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_Tenants]') IS NOT NULL
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM dbo.TalhaCRM_Tenants WHERE TenantId = @primaryTenantId)
+    DECLARE @tenantSql NVARCHAR(MAX) = N'
+    IF NOT EXISTS (SELECT 1 FROM [' + @schema + N'].[TalhaCRM_Tenants] WHERE TenantId = @pTenantId)
     BEGIN
-        INSERT INTO dbo.TalhaCRM_Tenants (
+        INSERT INTO [' + @schema + N'].[TalhaCRM_Tenants] (
             TenantId, CompanyName, Slug, ContactEmail, Phone, 
             DefaultCurrency, SubscriptionTier, SubscriptionStatus, 
             MaxUserSeats, MaxLeadsQuota, MonthlyAiRequestLimit, CurrentMonthAiUsageCount, 
             IsActive, CreatedAt, UpdatedAt
         ) VALUES (
-            @primaryTenantId, 'AI Powered CRM Enterprise', 'primary-tenant', 'compliance@aipoweredcrm.com', '+91-22-61234567',
-            'INR', 'Enterprise', 'Active',
+            @pTenantId, ''AI Powered CRM Enterprise'', ''primary-tenant'', ''compliance@aipoweredcrm.com'', ''+91-22-61234567'',
+            ''INR'', ''Enterprise'', ''Active'',
             100, 50000, 5000, 0,
             1, SYSUTCDATETIME(), SYSUTCDATETIME()
         );
-    END;
+    END;';
+    EXEC sp_executesql @tenantSql, N'@pTenantId UNIQUEIDENTIFIER', @pTenantId = @primaryTenantId;
 END;
 
-IF OBJECT_ID('dbo.TalhaCRM_TenantSettings') IS NOT NULL
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_TenantSettings]') IS NOT NULL
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM dbo.TalhaCRM_TenantSettings WHERE TenantId = @primaryTenantId)
+    DECLARE @settingSql NVARCHAR(MAX) = N'
+    IF NOT EXISTS (SELECT 1 FROM [' + @schema + N'].[TalhaCRM_TenantSettings] WHERE TenantId = @pTenantId)
     BEGIN
-        INSERT INTO dbo.TalhaCRM_TenantSettings (
+        INSERT INTO [' + @schema + N'].[TalhaCRM_TenantSettings] (
             TenantId, CurrencyCode, CurrencySymbol, DateFormat, TimeZoneId, 
             FiscalYearStartMonth, LeadAssignmentMode, RestrictLeadExport, UpdatedAt
         ) VALUES (
-            @primaryTenantId, 'INR', N'₹', 'dd/MM/yyyy', 'India Standard Time', 
-            4, 'Manual', 1, SYSUTCDATETIME()
+            @pTenantId, ''INR'', N''₹'', ''dd/MM/yyyy'', ''India Standard Time'', 
+            4, ''Manual'', 1, SYSUTCDATETIME()
         );
-    END;
+    END;';
+    EXEC sp_executesql @settingSql, N'@pTenantId UNIQUEIDENTIFIER', @pTenantId = @primaryTenantId;
 END;
 
-IF OBJECT_ID('dbo.TalhaCRM_TenantMemberships') IS NOT NULL
+IF OBJECT_ID(QUOTENAME(@schema) + '.[TalhaCRM_TenantMemberships]') IS NOT NULL
 BEGIN
-    -- Ensure tenant memberships exist for all active CRM users
-    INSERT INTO dbo.TalhaCRM_TenantMemberships (MembershipId, TenantId, UserId, CompanyRole, IsActive, JoinedAt)
-    SELECT NEWID(), @primaryTenantId, u.Id,
+    DECLARE @membershipSql NVARCHAR(MAX) = N'
+    INSERT INTO [' + @schema + N'].[TalhaCRM_TenantMemberships] (MembershipId, TenantId, UserId, CompanyRole, IsActive, JoinedAt)
+    SELECT NEWID(), @pTenantId, u.Id,
         CASE 
-            WHEN r.Name IN ('Admin', 'CompanyAdmin') THEN 'CompanyAdmin'
-            WHEN r.Name IN ('Manager', 'SalesManager') THEN 'Manager'
-            ELSE 'SalesExecutive'
+            WHEN r.Name IN (''Admin'', ''CompanyAdmin'') THEN ''CompanyAdmin''
+            WHEN r.Name IN (''Manager'', ''SalesManager'') THEN ''Manager''
+            ELSE ''SalesExecutive''
         END,
         1, SYSUTCDATETIME()
-    FROM dbo.TalhaCRM_AspNetUsers u
-    LEFT JOIN dbo.TalhaCRM_AspNetUserRoles ur ON u.Id = ur.UserId
-    LEFT JOIN dbo.TalhaCRM_AspNetRoles r ON ur.RoleId = r.Id
-    WHERE r.Name NOT IN ('PlatformSuperAdmin', 'SuperAdmin')
+    FROM [' + @schema + N'].[TalhaCRM_AspNetUsers] u
+    LEFT JOIN [' + @schema + N'].[TalhaCRM_AspNetUserRoles] ur ON u.Id = ur.UserId
+    LEFT JOIN [' + @schema + N'].[TalhaCRM_AspNetRoles] r ON ur.RoleId = r.Id
+    WHERE r.Name NOT IN (''PlatformSuperAdmin'', ''SuperAdmin'')
       AND NOT EXISTS (
-          SELECT 1 FROM dbo.TalhaCRM_TenantMemberships tm 
-          WHERE tm.TenantId = @primaryTenantId AND tm.UserId = u.Id
-      );
+          SELECT 1 FROM [' + @schema + N'].[TalhaCRM_TenantMemberships] tm 
+          WHERE tm.TenantId = @pTenantId AND tm.UserId = u.Id
+      );';
+    EXEC sp_executesql @membershipSql, N'@pTenantId UNIQUEIDENTIFIER', @pTenantId = @primaryTenantId;
 END;
 
 -- =============================================================================
 -- STEP 3: CLEAR DOMAIN TABLES IN CHILD-TO-PARENT ORDER
 -- =============================================================================
-DELETE FROM dbo.TalhaCRM_FollowUps;
-DELETE FROM dbo.TalhaCRM_LeadActivities;
-DELETE FROM dbo.TalhaCRM_AILeadInsights;
-DELETE FROM dbo.TalhaCRM_Notifications;
-DELETE FROM dbo.TalhaCRM_AuditLogs;
-IF OBJECT_ID('dbo.TalhaCRM_LeadStatusHistory') IS NOT NULL DELETE FROM dbo.TalhaCRM_LeadStatusHistory;
-DELETE FROM dbo.TalhaCRM_Leads;
+DECLARE @clearSql NVARCHAR(MAX) = N'
+DELETE FROM [' + @schema + N'].[TalhaCRM_FollowUps];
+DELETE FROM [' + @schema + N'].[TalhaCRM_LeadActivities];
+DELETE FROM [' + @schema + N'].[TalhaCRM_AILeadInsights];
+DELETE FROM [' + @schema + N'].[TalhaCRM_Notifications];
+DELETE FROM [' + @schema + N'].[TalhaCRM_AuditLogs];
+IF OBJECT_ID(''' + QUOTENAME(@schema) + N'.[TalhaCRM_LeadStatusHistory]'') IS NOT NULL DELETE FROM [' + @schema + N'].[TalhaCRM_LeadStatusHistory];
+DELETE FROM [' + @schema + N'].[TalhaCRM_Leads];
+';
+EXEC sp_executesql @clearSql;
 
 -- =============================================================================
 -- STEP 4: DYNAMIC RESTORATION OF DOMAIN RECORDS (ADAPTING TO TENANTID)
 -- =============================================================================
-DECLARE @hasTenantCol BIT = CASE WHEN COL_LENGTH('dbo.TalhaCRM_Leads', 'TenantId') IS NOT NULL THEN 1 ELSE 0 END;
+DECLARE @hasTenantCol BIT = CASE WHEN COL_LENGTH(QUOTENAME(@schema) + '.[TalhaCRM_Leads]', 'TenantId') IS NOT NULL THEN 1 ELSE 0 END;
 DECLARE @restoreDomainSql NVARCHAR(MAX);
 
 IF @hasTenantCol = 1
 BEGIN
     -- PHASE 2 OR PARTIALLY-APPLIED SCHEMA: Map TenantId to Primary Tenant
     SET @restoreDomainSql = N'
-    SET IDENTITY_INSERT dbo.TalhaCRM_Leads ON;
-    INSERT INTO dbo.TalhaCRM_Leads (LeadId, Name, Phone, Email, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt, TenantId)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Leads] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_Leads] (LeadId, Name, Phone, Email, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt, TenantId)
     SELECT LeadId, Name, Phone, Email, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_Leads;
-    SET IDENTITY_INSERT dbo.TalhaCRM_Leads OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_Leads];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Leads] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_LeadActivities ON;
-    INSERT INTO dbo.TalhaCRM_LeadActivities (ActivityId, LeadId, UserId, Type, Description, OccurredAt, TenantId)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadActivities] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_LeadActivities] (ActivityId, LeadId, UserId, Type, Description, OccurredAt, TenantId)
     SELECT ActivityId, LeadId, UserId, Type, Description, OccurredAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadActivities;
-    SET IDENTITY_INSERT dbo.TalhaCRM_LeadActivities OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadActivities];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadActivities] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_FollowUps ON;
-    INSERT INTO dbo.TalhaCRM_FollowUps (FollowUpId, LeadId, AssignedUserId, DueAt, Type, Notes, Status, CompletedAt, TenantId)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_FollowUps] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_FollowUps] (FollowUpId, LeadId, AssignedUserId, DueAt, Type, Notes, Status, CompletedAt, TenantId)
     SELECT FollowUpId, LeadId, AssignedUserId, DueAt, Type, Notes, Status, CompletedAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_FollowUps;
-    SET IDENTITY_INSERT dbo.TalhaCRM_FollowUps OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_FollowUps];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_FollowUps] OFF;
 
-    IF OBJECT_ID(''dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory'') IS NOT NULL AND (SELECT COUNT(*) FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory) > 0
+    IF OBJECT_ID(''' + QUOTENAME(@schema) + N'.[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory]'') IS NOT NULL AND (SELECT COUNT(*) FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory]) > 0
     BEGIN
-        SET IDENTITY_INSERT dbo.TalhaCRM_LeadStatusHistory ON;
-        INSERT INTO dbo.TalhaCRM_LeadStatusHistory (HistoryId, LeadId, OldStatus, NewStatus, ChangedByUserId, Notes, ChangedAt, TenantId)
+        SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadStatusHistory] ON;
+        INSERT INTO [' + @schema + N'].[TalhaCRM_LeadStatusHistory] (HistoryId, LeadId, OldStatus, NewStatus, ChangedByUserId, Notes, ChangedAt, TenantId)
         SELECT HistoryId, LeadId, OldStatus, NewStatus, ChangedByUserId, Notes, ChangedAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-        FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory;
-        SET IDENTITY_INSERT dbo.TalhaCRM_LeadStatusHistory OFF;
+        FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory];
+        SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadStatusHistory] OFF;
     END;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_AILeadInsights ON;
-    INSERT INTO dbo.TalhaCRM_AILeadInsights (InsightId, LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, SuggestedResponse, Provider, Model, GeneratedAt, TenantId)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AILeadInsights] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_AILeadInsights] (InsightId, LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, SuggestedResponse, Provider, Model, GeneratedAt, TenantId)
     SELECT InsightId, LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, SuggestedResponse, Provider, Model, GeneratedAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AILeadInsights;
-    SET IDENTITY_INSERT dbo.TalhaCRM_AILeadInsights OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AILeadInsights];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AILeadInsights] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_Notifications ON;
-    INSERT INTO dbo.TalhaCRM_Notifications (NotificationId, UserId, LeadId, Title, Message, IsRead, CreatedAt, TenantId)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Notifications] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_Notifications] (NotificationId, UserId, LeadId, Title, Message, IsRead, CreatedAt, TenantId)
     SELECT NotificationId, UserId, LeadId, Title, Message, IsRead, CreatedAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_Notifications;
-    SET IDENTITY_INSERT dbo.TalhaCRM_Notifications OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_Notifications];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Notifications] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_AuditLogs ON;
-    INSERT INTO dbo.TalhaCRM_AuditLogs (AuditLogId, UserId, EntityType, EntityId, Action, DetailsJson, CreatedAt, TenantId)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AuditLogs] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_AuditLogs] (AuditLogId, UserId, EntityType, EntityId, Action, DetailsJson, CreatedAt, TenantId)
     SELECT AuditLogId, UserId, EntityType, EntityId, Action, DetailsJson, CreatedAt, CAST(''11111111-1111-1111-1111-111111111111'' AS uniqueidentifier)
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AuditLogs;
-    SET IDENTITY_INSERT dbo.TalhaCRM_AuditLogs OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AuditLogs];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AuditLogs] OFF;
     ';
 END
 ELSE
 BEGIN
     -- PHASE 1 SCHEMA (No TenantId Column): Clean baseline restoration
     SET @restoreDomainSql = N'
-    SET IDENTITY_INSERT dbo.TalhaCRM_Leads ON;
-    INSERT INTO dbo.TalhaCRM_Leads (LeadId, Name, Phone, Email, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Leads] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_Leads] (LeadId, Name, Phone, Email, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt)
     SELECT LeadId, Name, Phone, Email, Company, Source, InterestedProduct, Budget, Status, Priority, OwnerUserId, IsArchived, CreatedAt, UpdatedAt
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_Leads;
-    SET IDENTITY_INSERT dbo.TalhaCRM_Leads OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_Leads];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Leads] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_LeadActivities ON;
-    INSERT INTO dbo.TalhaCRM_LeadActivities (ActivityId, LeadId, UserId, Type, Description, OccurredAt)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadActivities] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_LeadActivities] (ActivityId, LeadId, UserId, Type, Description, OccurredAt)
     SELECT ActivityId, LeadId, UserId, Type, Description, OccurredAt
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadActivities;
-    SET IDENTITY_INSERT dbo.TalhaCRM_LeadActivities OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadActivities];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadActivities] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_FollowUps ON;
-    INSERT INTO dbo.TalhaCRM_FollowUps (FollowUpId, LeadId, AssignedUserId, DueAt, Type, Notes, Status, CompletedAt)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_FollowUps] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_FollowUps] (FollowUpId, LeadId, AssignedUserId, DueAt, Type, Notes, Status, CompletedAt)
     SELECT FollowUpId, LeadId, AssignedUserId, DueAt, Type, Notes, Status, CompletedAt
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_FollowUps;
-    SET IDENTITY_INSERT dbo.TalhaCRM_FollowUps OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_FollowUps];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_FollowUps] OFF;
 
-    IF OBJECT_ID(''dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory'') IS NOT NULL AND (SELECT COUNT(*) FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory) > 0
+    IF OBJECT_ID(''' + QUOTENAME(@schema) + N'.[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory]'') IS NOT NULL AND (SELECT COUNT(*) FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory]) > 0
     BEGIN
-        SET IDENTITY_INSERT dbo.TalhaCRM_LeadStatusHistory ON;
-        INSERT INTO dbo.TalhaCRM_LeadStatusHistory (HistoryId, LeadId, OldStatus, NewStatus, ChangedByUserId, Notes, ChangedAt)
+        SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadStatusHistory] ON;
+        INSERT INTO [' + @schema + N'].[TalhaCRM_LeadStatusHistory] (HistoryId, LeadId, OldStatus, NewStatus, ChangedByUserId, Notes, ChangedAt)
         SELECT HistoryId, LeadId, OldStatus, NewStatus, ChangedByUserId, Notes, ChangedAt
-        FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory;
-        SET IDENTITY_INSERT dbo.TalhaCRM_LeadStatusHistory OFF;
+        FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_LeadStatusHistory];
+        SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_LeadStatusHistory] OFF;
     END;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_AILeadInsights ON;
-    INSERT INTO dbo.TalhaCRM_AILeadInsights (InsightId, LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, SuggestedResponse, Provider, Model, GeneratedAt)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AILeadInsights] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_AILeadInsights] (InsightId, LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, SuggestedResponse, Provider, Model, GeneratedAt)
     SELECT InsightId, LeadId, Classification, Score, Summary, NextBestAction, RiskLevel, Urgency, ReasonJson, SuggestedResponse, Provider, Model, GeneratedAt
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AILeadInsights;
-    SET IDENTITY_INSERT dbo.TalhaCRM_AILeadInsights OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AILeadInsights];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AILeadInsights] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_Notifications ON;
-    INSERT INTO dbo.TalhaCRM_Notifications (NotificationId, UserId, LeadId, Title, Message, IsRead, CreatedAt)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Notifications] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_Notifications] (NotificationId, UserId, LeadId, Title, Message, IsRead, CreatedAt)
     SELECT NotificationId, UserId, LeadId, Title, Message, IsRead, CreatedAt
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_Notifications;
-    SET IDENTITY_INSERT dbo.TalhaCRM_Notifications OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_Notifications];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_Notifications] OFF;
 
-    SET IDENTITY_INSERT dbo.TalhaCRM_AuditLogs ON;
-    INSERT INTO dbo.TalhaCRM_AuditLogs (AuditLogId, UserId, EntityType, EntityId, Action, DetailsJson, CreatedAt)
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AuditLogs] ON;
+    INSERT INTO [' + @schema + N'].[TalhaCRM_AuditLogs] (AuditLogId, UserId, EntityType, EntityId, Action, DetailsJson, CreatedAt)
     SELECT AuditLogId, UserId, EntityType, EntityId, Action, DetailsJson, CreatedAt
-    FROM dbo.TalhaCRM_BKP_' + @SnapshotSuffix + N'_AuditLogs;
-    SET IDENTITY_INSERT dbo.TalhaCRM_AuditLogs OFF;
+    FROM [' + @schema + N'].[TalhaCRM_BKP_' + @SnapshotSuffix + N'_AuditLogs];
+    SET IDENTITY_INSERT [' + @schema + N'].[TalhaCRM_AuditLogs] OFF;
     ';
 END;
 
@@ -274,14 +285,17 @@ EXEC sp_executesql @restoreDomainSql;
 -- =============================================================================
 -- STEP 5: RE-CHECK & ENFORCE CONSTRAINTS
 -- =============================================================================
-ALTER TABLE dbo.TalhaCRM_FollowUps WITH CHECK CHECK CONSTRAINT ALL;
-ALTER TABLE dbo.TalhaCRM_LeadActivities WITH CHECK CHECK CONSTRAINT ALL;
-ALTER TABLE dbo.TalhaCRM_AILeadInsights WITH CHECK CHECK CONSTRAINT ALL;
-ALTER TABLE dbo.TalhaCRM_Notifications WITH CHECK CHECK CONSTRAINT ALL;
-ALTER TABLE dbo.TalhaCRM_AuditLogs WITH CHECK CHECK CONSTRAINT ALL;
-IF OBJECT_ID('dbo.TalhaCRM_LeadStatusHistory') IS NOT NULL ALTER TABLE dbo.TalhaCRM_LeadStatusHistory WITH CHECK CHECK CONSTRAINT ALL;
-ALTER TABLE dbo.TalhaCRM_Leads WITH CHECK CHECK CONSTRAINT ALL;
-IF OBJECT_ID('dbo.TalhaCRM_TenantMemberships') IS NOT NULL ALTER TABLE dbo.TalhaCRM_TenantMemberships WITH CHECK CHECK CONSTRAINT ALL;
-IF OBJECT_ID('dbo.TalhaCRM_TenantSettings') IS NOT NULL ALTER TABLE dbo.TalhaCRM_TenantSettings WITH CHECK CHECK CONSTRAINT ALL;
+DECLARE @enforceSql NVARCHAR(MAX) = N'
+ALTER TABLE [' + @schema + N'].[TalhaCRM_FollowUps] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [' + @schema + N'].[TalhaCRM_LeadActivities] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [' + @schema + N'].[TalhaCRM_AILeadInsights] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [' + @schema + N'].[TalhaCRM_Notifications] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [' + @schema + N'].[TalhaCRM_AuditLogs] WITH CHECK CHECK CONSTRAINT ALL;
+IF OBJECT_ID(''' + QUOTENAME(@schema) + N'.[TalhaCRM_LeadStatusHistory]'') IS NOT NULL ALTER TABLE [' + @schema + N'].[TalhaCRM_LeadStatusHistory] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [' + @schema + N'].[TalhaCRM_Leads] WITH CHECK CHECK CONSTRAINT ALL;
+IF OBJECT_ID(''' + QUOTENAME(@schema) + N'.[TalhaCRM_TenantMemberships]'') IS NOT NULL ALTER TABLE [' + @schema + N'].[TalhaCRM_TenantMemberships] WITH CHECK CHECK CONSTRAINT ALL;
+IF OBJECT_ID(''' + QUOTENAME(@schema) + N'.[TalhaCRM_TenantSettings]'') IS NOT NULL ALTER TABLE [' + @schema + N'].[TalhaCRM_TenantSettings] WITH CHECK CHECK CONSTRAINT ALL;
+';
+EXEC sp_executesql @enforceSql;
 
 COMMIT TRANSACTION;

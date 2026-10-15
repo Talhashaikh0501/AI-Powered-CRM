@@ -55,7 +55,7 @@ try {
 
     if ([string]::IsNullOrWhiteSpace($snapshotSuffix)) {
         # Fallback to query the latest snapshot metadata record
-        $cmd.CommandText = "SELECT TOP 1 SnapshotSuffix FROM dbo.TalhaCRM_BKP_SnapshotMetadata ORDER BY SnapshotId DESC"
+        $cmd.CommandText = "SELECT TOP 1 SnapshotSuffix FROM [TalhaCRM_BKP_SnapshotMetadata] ORDER BY SnapshotId DESC"
         $snapshotSuffix = [string]$cmd.ExecuteScalar()
     }
 
@@ -90,22 +90,22 @@ try {
         $cmd.CommandText = "SELECT COUNT(*) FROM [$tbl]"
         $srcCount = [int]$cmd.ExecuteScalar()
 
-        $cmd.CommandText = "IF OBJECT_ID('dbo.[$backupTbl]') IS NOT NULL SELECT COUNT(*) FROM dbo.[$backupTbl] ELSE SELECT -1"
+        $cmd.CommandText = "IF OBJECT_ID('[$backupTbl]') IS NOT NULL SELECT COUNT(*) FROM [$backupTbl] ELSE SELECT -1"
         $bkpCount = [int]$cmd.ExecuteScalar()
 
         if ($bkpCount -eq -1) {
-            Write-Error "CRITICAL: Snapshot table dbo.[$backupTbl] was NOT found in database!"
+            Write-Error "CRITICAL: Snapshot table [$backupTbl] was NOT found in database!"
             $mismatches++
         } elseif ($srcCount -ne $bkpCount) {
             Write-Error "CRITICAL: Row count mismatch for $tbl! Source count: $srcCount, Snapshot count: $bkpCount"
             $mismatches++
         } else {
-            Write-Output "  -> PASS: $tbl ($srcCount rows) == dbo.[$backupTbl] ($bkpCount rows)"
+            Write-Output "  -> PASS: $tbl ($srcCount rows) == [$backupTbl] ($bkpCount rows)"
         }
     }
 
     if ($mismatches -gt 0) {
-        $cmd.CommandText = "UPDATE dbo.TalhaCRM_BKP_SnapshotMetadata SET Status = 'Failed' WHERE SnapshotSuffix = @suffix"
+        $cmd.CommandText = "UPDATE [TalhaCRM_BKP_SnapshotMetadata] SET Status = 'Failed' WHERE SnapshotSuffix = @suffix"
         $cmd.Parameters.Clear()
         $p = $cmd.Parameters.Add("@suffix", [System.Data.SqlDbType]::NVarChar, 50)
         $p.Value = $snapshotSuffix
@@ -116,7 +116,7 @@ try {
     }
 
     # Mark as Verified ONLY after row counts match 100% across all tables
-    $cmd.CommandText = "UPDATE dbo.TalhaCRM_BKP_SnapshotMetadata SET Status = 'Verified' WHERE SnapshotSuffix = @suffix"
+    $cmd.CommandText = "UPDATE [TalhaCRM_BKP_SnapshotMetadata] SET Status = 'Verified' WHERE SnapshotSuffix = @suffix"
     $cmd.Parameters.Clear()
     $p = $cmd.Parameters.Add("@suffix", [System.Data.SqlDbType]::NVarChar, 50)
     $p.Value = $snapshotSuffix

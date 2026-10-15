@@ -1,0 +1,228 @@
+@model AI_Powered_CRM.ViewModels.RegisterCompanyViewModel
+@{
+    ViewData["Title"] = "Create Company Workspace";
+    Layout = "_Layout";
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden" style="max-width: 1000px; width: 100%;">
+        <div class="row g-0">
+            <!-- Left Info Panel -->
+            <div class="col-lg-5 d-none d-lg-flex flex-column justify-content-between p-5 text-white" 
+                 style="background: linear-gradient(145deg, #0f172a 0%, #1e3a8a 100%);">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-4">
+                        <div class="rounded-3 bg-primary p-2 text-white d-flex align-items-center justify-content-center shadow" style="width: 42px; height: 42px;">
+                            <i class="bi bi-building-check fs-4"></i>
+                        </div>
+                        <h4 class="fw-bold mb-0 text-white">NexusCRM <span class="badge bg-primary text-white fs-6">SaaS</span></h4>
+                    </div>
+
+                    <h2 class="fw-bold mb-3">Launch Your AI-Powered Workspace</h2>
+                    <p class="text-light text-opacity-75 lead fs-6">
+                        Set up a multi-tenant workspace with strict data isolation, INR-based currency defaults, AI-assisted lead scoring, and 5 free team seats.
+                    </p>
+
+                    <ul class="list-unstyled mt-4 d-flex flex-column gap-3">
+                        <li class="d-flex align-items-start gap-2 text-light text-opacity-90 small">
+                            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                            <div><strong>14-Day Free Trial:</strong> Full enterprise AI capabilities included.</div>
+                        </li>
+                        <li class="d-flex align-items-start gap-2 text-light text-opacity-90 small">
+                            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                            <div><strong>Zero-Leakage Multi-Tenancy:</strong> Strict query-filter tenant isolation.</div>
+                        </li>
+                        <li class="d-flex align-items-start gap-2 text-light text-opacity-90 small">
+                            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                            <div><strong>Team Collaboration:</strong> Seamless employee invites and role-based permissions.</div>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="pt-4 border-top border-white border-opacity-10">
+                    <div class="d-flex align-items-center gap-2 text-light text-opacity-75 small">
+                        <i class="bi bi-shield-lock-fill text-warning"></i>
+                        <span>Enterprise grade encryption & audit trails.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Registration Form -->
+            <div class="col-lg-7 p-4 p-sm-5 bg-white">
+                <div class="mb-4">
+                    <h3 class="fw-bold text-dark mb-1">Create Company Workspace</h3>
+                    <p class="text-muted small">Enter your organization details to get started.</p>
+                </div>
+
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="alert alert-danger py-2 small" role="alert">
+                        @Html.ValidationSummary(false, "", new { @class = "mb-0" })
+                    </div>
+                }
+
+                <form asp-action="RegisterCompany" method="post" id="registerCompanyForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3">
+                        <!-- Company Name -->
+                        <div class="col-12">
+                            <label asp-for="CompanyName" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-building"></i></span>
+                                <input asp-for="CompanyName" class="form-control border-start-0" id="companyNameInput" placeholder="Acme Corporation" />
+                            </div>
+                            <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Slug -->
+                        <div class="col-12">
+                            <label asp-for="Slug" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-link-45deg"></i></span>
+                                <input asp-for="Slug" class="form-control border-start-0" id="slugInput" placeholder="acme-corp" />
+                                <button type="button" class="btn btn-outline-secondary" id="checkSlugBtn">Check</button>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                <span id="slugPreview" class="text-muted small" style="font-family: monospace;">Workspace URL: /t/<strong id="slugDisplay">workspace</strong></span>
+                                <span id="slugStatus" class="small fw-semibold"></span>
+                            </div>
+                            <span asp-validation-for="Slug" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Founder Name -->
+                        <div class="col-md-6">
+                            <label asp-for="AdminFullName" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                                <input asp-for="AdminFullName" class="form-control border-start-0" placeholder="John Doe" />
+                            </div>
+                            <span asp-validation-for="AdminFullName" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Work Email -->
+                        <div class="col-md-6">
+                            <label asp-for="ContactEmail" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                                <input asp-for="ContactEmail" class="form-control border-start-0" placeholder="john@acme.com" />
+                            </div>
+                            <span asp-validation-for="ContactEmail" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Phone -->
+                        <div class="col-12">
+                            <label asp-for="Phone" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-telephone"></i></span>
+                                <input asp-for="Phone" class="form-control border-start-0" placeholder="+91 98765 43210" />
+                            </div>
+                            <span asp-validation-for="Phone" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Password -->
+                        <div class="col-md-6">
+                            <label asp-for="Password" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock"></i></span>
+                                <input asp-for="Password" class="form-control border-start-0" placeholder="••••••••" />
+                            </div>
+                            <span asp-validation-for="Password" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Confirm Password -->
+                        <div class="col-md-6">
+                            <label asp-for="ConfirmPassword" class="form-label small fw-semibold text-secondary"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-shield-check"></i></span>
+                                <input asp-for="ConfirmPassword" class="form-control border-start-0" placeholder="••••••••" />
+                            </div>
+                            <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm mb-3" id="submitBtn">
+                            <i class="bi bi-rocket-takeoff-fill me-1"></i> Create Company Workspace
+                        </button>
+                    </div>
+
+                    <div class="text-center">
+                        <span class="text-muted small">Already have an account? </span>
+                        <a asp-action="Login" class="text-decoration-none small text-primary fw-semibold">Sign In</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const companyNameInput = document.getElementById('companyNameInput');
+            const slugInput = document.getElementById('slugInput');
+            const slugDisplay = document.getElementById('slugDisplay');
+            const slugStatus = document.getElementById('slugStatus');
+            const checkSlugBtn = document.getElementById('checkSlugBtn');
+
+            function toSlug(text) {
+                return text.toString().toLowerCase()
+                    .trim()
+                    .replace(/\s+/g, '-')
+                    .replace(/[^\w\-]+/g, '')
+                    .replace(/\-\-+/g, '-')
+                    .replace(/^-+/, '')
+                    .replace(/-+$/, '');
+            }
+
+            let slugTouched = false;
+
+            companyNameInput.addEventListener('input', function () {
+                if (!slugTouched) {
+                    const generated = toSlug(this.value);
+                    slugInput.value = generated;
+                    slugDisplay.textContent = generated || 'workspace';
+                }
+            });
+
+            slugInput.addEventListener('input', function () {
+                slugTouched = true;
+                const cleanSlug = toSlug(this.value);
+                slugDisplay.textContent = cleanSlug || 'workspace';
+                slugStatus.textContent = '';
+            });
+
+            async function checkAvailability() {
+                const slug = slugInput.value.trim();
+                if (!slug) {
+                    slugStatus.textContent = 'Enter a slug';
+                    slugStatus.className = 'small fw-semibold text-warning';
+                    return;
+                }
+
+                slugStatus.textContent = 'Checking...';
+                slugStatus.className = 'small fw-semibold text-muted';
+
+                try {
+                    const resp = await fetch(`/Account/CheckSlug?slug=${encodeURIComponent(slug)}`);
+                    const data = await resp.json();
+                    if (data.available) {
+                        slugStatus.textContent = '✓ Available';
+                        slugStatus.className = 'small fw-semibold text-success';
+                    } else {
+                        slugStatus.textContent = '✗ Taken';
+                        slugStatus.className = 'small fw-semibold text-danger';
+                    }
+                } catch (e) {
+                    slugStatus.textContent = 'Error checking';
+                    slugStatus.className = 'small fw-semibold text-muted';
+                }
+            }
+
+            checkSlugBtn.addEventListener('click', checkAvailability);
+            slugInput.addEventListener('blur', checkAvailability);
+        });
+    </script>
+}

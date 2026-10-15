@@ -53,6 +53,7 @@ namespace AIPoweredCRM.Tests
                 services.AddDbContext<ApplicationDbContext>(options =>
                 {
                     options.UseInMemoryDatabase(_dbName);
+                    options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning));
                     options.AddInterceptors(new TestAuditFailureInterceptor(this));
                 });
             });

@@ -1,0 +1,88 @@
+@model AI_Powered_CRM.ViewModels.AcceptInvitationViewModel
+@{
+    ViewData["Title"] = $"Join {Model.CompanyName}";
+    Layout = "_Layout";
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden" style="max-width: 600px; width: 100%;">
+        <div class="p-4 p-sm-5 bg-white">
+            <div class="text-center mb-4">
+                <div class="rounded-circle bg-primary bg-opacity-10 text-primary mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 64px; height: 64px;">
+                    <i class="bi bi-envelope-open-heart-fill fs-2"></i>
+                </div>
+                <h3 class="fw-bold text-dark mb-1">You've been invited!</h3>
+                <p class="text-muted small">
+                    Join <strong>@Model.CompanyName</strong> on NexusCRM AI as
+                    <span class="badge bg-primary text-white">@Model.CompanyRole</span>.
+                </p>
+            </div>
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger py-2 small" role="alert">
+                    @Html.ValidationSummary(false, "", new { @class = "mb-0" })
+                </div>
+            }
+
+            <form asp-action="AcceptInvitation" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Token" />
+                <input type="hidden" asp-for="CompanyName" />
+                <input type="hidden" asp-for="CompanyRole" />
+
+                <!-- Email (Read-only) -->
+                <div class="mb-3">
+                    <label asp-for="Email" class="form-label small fw-semibold text-secondary"></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                        <input asp-for="Email" class="form-control border-start-0 bg-light" readonly />
+                    </div>
+                </div>
+
+                <!-- Full Name -->
+                <div class="mb-3">
+                    <label asp-for="FullName" class="form-label small fw-semibold text-secondary"></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                        <input asp-for="FullName" class="form-control border-start-0" placeholder="Your Full Name" autofocus />
+                    </div>
+                    <span asp-validation-for="FullName" class="text-danger small"></span>
+                </div>
+
+                <!-- Password -->
+                <div class="mb-3">
+                    <label asp-for="Password" class="form-label small fw-semibold text-secondary"></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock"></i></span>
+                        <input asp-for="Password" class="form-control border-start-0" placeholder="Create a secure password" />
+                    </div>
+                    <span asp-validation-for="Password" class="text-danger small"></span>
+                </div>
+
+                <!-- Confirm Password -->
+                <div class="mb-4">
+                    <label asp-for="ConfirmPassword" class="form-label small fw-semibold text-secondary"></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-shield-check"></i></span>
+                        <input asp-for="ConfirmPassword" class="form-control border-start-0" placeholder="Re-enter your password" />
+                    </div>
+                    <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm mb-3">
+                    <i class="bi bi-check2-circle me-1"></i> Accept Invitation & Join
+                </button>
+
+                <div class="text-center">
+                    <span class="text-muted small">Already member of another workspace? </span>
+                    <a asp-action="Login" class="text-decoration-none small text-primary fw-semibold">Sign In</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

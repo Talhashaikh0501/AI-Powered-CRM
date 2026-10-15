@@ -164,8 +164,8 @@ try {
     $cmd.CommandText = @"
         SELECT COUNT(*) 
         FROM TalhaCRM_TenantMemberships tm
-        JOIN dbo.TalhaCRM_AspNetUserRoles ur ON tm.UserId = ur.UserId
-        JOIN dbo.TalhaCRM_AspNetRoles r ON ur.RoleId = r.Id
+        JOIN TalhaCRM_AspNetUserRoles ur ON tm.UserId = ur.UserId
+        JOIN TalhaCRM_AspNetRoles r ON ur.RoleId = r.Id
         WHERE r.Name IN ('PlatformSuperAdmin', 'SuperAdmin')
 "@
     $saCount = [int]$cmd.ExecuteScalar()

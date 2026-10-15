@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using AI_Powered_CRM.Models;
 using AI_Powered_CRM.Services.Interfaces;
+using AI_Powered_CRM.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,18 +17,24 @@ namespace AI_Powered_CRM.Controllers
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly UserManager<ApplicationUser>   _userManager;
         private readonly IAuditService                  _auditService;
+        private readonly ICompanyOnboardingService      _onboardingService;
+        private readonly ITenantInvitationService       _invitationService;
         private readonly ILogger<AccountController>     _logger;
 
         public AccountController(
             SignInManager<ApplicationUser> signInManager,
             UserManager<ApplicationUser>   userManager,
             IAuditService                  auditService,
+            ICompanyOnboardingService      onboardingService,
+            ITenantInvitationService       invitationService,
             ILogger<AccountController>     logger)
         {
-            _signInManager = signInManager;
-            _userManager   = userManager;
-            _auditService  = auditService;
-            _logger        = logger;
+            _signInManager     = signInManager;
+            _userManager       = userManager;
+            _auditService      = auditService;
+            _onboardingService = onboardingService;
+            _invitationService = invitationService;
+            _logger            = logger;
         }
 
         // -------------------------------------------------------
@@ -135,6 +142,139 @@ namespace AI_Powered_CRM.Controllers
             _logger.LogInformation("User {UserId} logged out.", userId);
             await _auditService.LogAsync(userId, "Account", userId, "Logout");
             return RedirectToAction("Login", "Account");
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/RegisterCompany
+        // -------------------------------------------------------
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult RegisterCompany()
+        {
+            if (User.Identity?.IsAuthenticated == true)
+                return RedirectToAction("Index", "Dashboard");
+
+            return View(new RegisterCompanyViewModel());
+        }
+
+        // -------------------------------------------------------
+        // POST /Account/RegisterCompany
+        // -------------------------------------------------------
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login")]
+        public async Task<IActionResult> RegisterCompany(RegisterCompanyViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var result = await _onboardingService.RegisterCompanyAsync(model);
+            if (!result.Succeeded)
+            {
+                foreach (var err in result.Errors)
+                {
+                    ModelState.AddModelError(string.Empty, err);
+                }
+                return View(model);
+            }
+
+            _logger.LogInformation("Company registered successfully: {CompanyName} (TenantId: {TenantId})",
+                model.CompanyName, result.TenantId);
+
+            var user = await _userManager.FindByEmailAsync(model.ContactEmail);
+            if (user != null)
+            {
+                await _signInManager.SignInAsync(user, isPersistent: false);
+                TempData["SuccessMessage"] = $"Welcome to your new workspace for {model.CompanyName}! Your setup is complete.";
+                return RedirectToAction("Index", "Dashboard");
+            }
+
+            TempData["SuccessMessage"] = "Your company workspace was registered successfully. Please sign in.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/CheckSlug?slug=xyz
+        // -------------------------------------------------------
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> CheckSlug(string slug)
+        {
+            if (string.IsNullOrWhiteSpace(slug))
+                return Json(new { available = false, message = "Slug cannot be empty." });
+
+            var isAvailable = await _onboardingService.IsSlugAvailableAsync(slug);
+            return Json(new { available = isAvailable });
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/AcceptInvitation?token=xyz
+        // -------------------------------------------------------
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> AcceptInvitation(string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                TempData["ErrorMessage"] = "Invalid invitation link.";
+                return RedirectToAction(nameof(Login));
+            }
+
+            var invitation = await _invitationService.ValidateInvitationTokenAsync(token);
+            if (invitation == null)
+            {
+                ViewBag.ErrorMessage = "This invitation is invalid, has expired, or has already been accepted.";
+                return View("InvitationInvalid");
+            }
+
+            var model = new AcceptInvitationViewModel
+            {
+                Token = token,
+                Email = invitation.Email,
+                CompanyName = invitation.Tenant?.CompanyName ?? "Workspace",
+                CompanyRole = invitation.CompanyRole
+            };
+
+            return View(model);
+        }
+
+        // -------------------------------------------------------
+        // POST /Account/AcceptInvitation
+        // -------------------------------------------------------
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login")]
+        public async Task<IActionResult> AcceptInvitation(AcceptInvitationViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var result = await _invitationService.AcceptInvitationAsync(model.Token, model.FullName, model.Password);
+            if (!result.Succeeded)
+            {
+                foreach (var err in result.Errors)
+                {
+                    ModelState.AddModelError(string.Empty, err);
+                }
+                return View(model);
+            }
+
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user != null)
+            {
+                await _signInManager.SignInAsync(user, isPersistent: false);
+                TempData["SuccessMessage"] = $"Welcome aboard! You have joined {model.CompanyName}.";
+                return RedirectToAction("Index", "Dashboard");
+            }
+
+            TempData["SuccessMessage"] = "Invitation accepted successfully. Please sign in with your password.";
+            return RedirectToAction(nameof(Login));
         }
 
         // -------------------------------------------------------

@@ -230,6 +230,8 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IDeterministicFallbackScorer, DeterministicFallbackScorer>();
 builder.Services.AddScoped<IAIService, GroqAIService>();
+builder.Services.AddScoped<ICompanyOnboardingService, CompanyOnboardingService>();
+builder.Services.AddScoped<ITenantInvitationService, TenantInvitationService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IFollowUpService, FollowUpService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();

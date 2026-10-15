@@ -87,9 +87,15 @@
                         </div>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm mb-4">
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm mb-3">
                         <i class="bi bi-box-arrow-in-right me-1"></i> Sign In to CRM
                     </button>
+
+                    <div class="text-center mb-4">
+                        <a asp-action="RegisterCompany" class="text-decoration-none small text-primary fw-semibold">
+                            <i class="bi bi-building-add me-1"></i> Create a new Company Workspace
+                        </a>
+                    </div>
                 </form>
 
                 @if (HostEnv.IsDevelopment())

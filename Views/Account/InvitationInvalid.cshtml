@@ -1,0 +1,26 @@
+@{
+    ViewData["Title"] = "Invalid Invitation";
+    Layout = "_Layout";
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden text-center p-5" style="max-width: 500px; width: 100%;">
+        <div class="rounded-circle bg-danger bg-opacity-10 text-danger mx-auto mb-4 d-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
+            <i class="bi bi-exclamation-triangle-fill fs-1"></i>
+        </div>
+
+        <h3 class="fw-bold text-dark mb-2">Invitation Invalid or Expired</h3>
+        <p class="text-muted small mb-4">
+            @(ViewBag.ErrorMessage ?? "This invitation link is invalid, has expired after 7 days, or has already been used.")
+        </p>
+
+        <div class="d-flex flex-column gap-2">
+            <a asp-action="Login" class="btn btn-primary py-2 fw-semibold shadow-sm">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Go to Sign In
+            </a>
+            <a asp-action="RegisterCompany" class="btn btn-outline-secondary py-2">
+                <i class="bi bi-building-add me-1"></i> Create Your Own Workspace
+            </a>
+        </div>
+    </div>
+</div>

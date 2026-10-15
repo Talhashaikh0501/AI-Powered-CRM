@@ -23,19 +23,25 @@ namespace AI_Powered_CRM.Controllers
         private readonly IAuditService _auditService;
         private readonly ApplicationDbContext _context;
         private readonly ITenantContext _tenantContext;
+        private readonly ITenantInvitationService _invitationService;
+        private readonly ISubscriptionQuotaService _quotaService;
 
         public AdminController(
             UserManager<ApplicationUser> userManager,
             RoleManager<IdentityRole> roleManager,
             IAuditService auditService,
             ApplicationDbContext context,
-            ITenantContext tenantContext)
+            ITenantContext tenantContext,
+            ITenantInvitationService invitationService,
+            ISubscriptionQuotaService quotaService)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _auditService = auditService;
             _context = context;
             _tenantContext = tenantContext;
+            _invitationService = invitationService;
+            _quotaService = quotaService;
         }
 
         // GET: /Admin/Users
@@ -105,6 +111,76 @@ namespace AI_Powered_CRM.Controllers
         {
             var logs = await _auditService.GetRecentLogsAsync(100);
             return View(logs);
+        }
+
+        // GET: /Admin/Invitations
+        public async Task<IActionResult> Invitations()
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var tenant = await _context.Tenants.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TenantId == currentTenantId);
+            var invitations = await _invitationService.GetTenantInvitationsAsync(currentTenantId);
+
+            var activeSeats = await _context.TenantMemberships
+                .Where(m => m.TenantId == currentTenantId && m.IsActive)
+                .CountAsync();
+
+            var viewModel = new AdminInvitationsViewModel
+            {
+                Invitations = invitations,
+                ActiveUserSeats = activeSeats,
+                MaxUserSeats = tenant?.MaxUserSeats ?? 5
+            };
+
+            return View(viewModel);
+        }
+
+        // POST: /Admin/InviteUser
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> InviteUser(InviteUserViewModel model)
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "admin";
+
+            if (!ModelState.IsValid)
+            {
+                TempData["ErrorMessage"] = "Please provide a valid employee email and role.";
+                return RedirectToAction(nameof(Invitations));
+            }
+
+            var result = await _invitationService.CreateInvitationAsync(currentTenantId, model.Email, model.CompanyRole, currentUserId);
+            if (!result.Succeeded)
+            {
+                TempData["ErrorMessage"] = string.Join(" ", result.Errors);
+                return RedirectToAction(nameof(Invitations));
+            }
+
+            var inviteUrl = Url.Action("AcceptInvitation", "Account", new { token = result.RawToken }, Request.Scheme);
+            TempData["SuccessMessage"] = $"Invitation generated for {model.Email}.";
+            TempData["InviteUrl"] = inviteUrl;
+
+            return RedirectToAction(nameof(Invitations));
+        }
+
+        // POST: /Admin/RevokeInvitation
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RevokeInvitation(Guid invitationId)
+        {
+            var currentTenantId = _tenantContext.CurrentTenantId;
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "admin";
+
+            var success = await _invitationService.RevokeInvitationAsync(currentTenantId, invitationId, currentUserId);
+            if (success)
+            {
+                TempData["SuccessMessage"] = "Invitation revoked successfully.";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = "Unable to revoke invitation. It may have already been accepted or removed.";
+            }
+
+            return RedirectToAction(nameof(Invitations));
         }
     }
 }
