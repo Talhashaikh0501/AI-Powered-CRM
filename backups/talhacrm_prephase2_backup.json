@@ -1,0 +1,404 @@
+{
+    "TimestampUtc":  "2026-10-15T19:46:43.7345433Z",
+    "Server":  "A2NWPLSK14SQL-v01.shr.prod.iad2.secureserver.net",
+    "TableCounts":  {
+                        "TalhaCRM_AuditLogs":  4,
+                        "TalhaCRM_AspNetRoleClaims":  0,
+                        "TalhaCRM_LeadStatusHistory":  0,
+                        "TalhaCRM_AILeadInsights":  1,
+                        "TalhaCRM_FollowUps":  3,
+                        "TalhaCRM_AspNetUserLogins":  0,
+                        "TalhaCRM_AspNetUserRoles":  3,
+                        "TalhaCRM_Notifications":  2,
+                        "TalhaCRM_AspNetUserTokens":  0,
+                        "TalhaCRM_Leads":  7,
+                        "TalhaCRM_AspNetRoles":  3,
+                        "TalhaCRM_LeadActivities":  5,
+                        "TalhaCRM_EFMigrationsHistory":  1,
+                        "TalhaCRM_AspNetUsers":  3,
+                        "TalhaCRM_AspNetUserClaims":  0
+                    },
+    "Data":  {
+                 "TalhaCRM_AuditLogs":  [
+                                            {
+                                                "DetailsJson":  "{\"Name\":\"Ahmed Khan\",\"Source\":\"Instagram\",\"Budget\":85000}",
+                                                "AuditLogId":  1,
+                                                "Action":  "Created",
+                                                "CreatedAt":  "\/Date(1790979466097)\/",
+                                                "EntityType":  "Lead",
+                                                "EntityId":  "1",
+                                                "UserId":  "55a17108-242a-4643-b40c-eb7f0a3dc43c"
+                                            },
+                                            {
+                                                "DetailsJson":  "{\"outcomeNotes\":\"grg\"}",
+                                                "AuditLogId":  2,
+                                                "Action":  "Completed",
+                                                "CreatedAt":  "\/Date(1791844424496)\/",
+                                                "EntityType":  "FollowUp",
+                                                "EntityId":  "2",
+                                                "UserId":  "ba8663f3-533d-434c-b580-8e8865b8f6b2"
+                                            },
+                                            {
+                                                "DetailsJson":  "{}",
+                                                "AuditLogId":  3,
+                                                "Action":  "Logout",
+                                                "CreatedAt":  "\/Date(1791850374905)\/",
+                                                "EntityType":  "Account",
+                                                "EntityId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287"
+                                            },
+                                            {
+                                                "DetailsJson":  "{}",
+                                                "AuditLogId":  4,
+                                                "Action":  "LoginSuccess",
+                                                "CreatedAt":  "\/Date(1792036438964)\/",
+                                                "EntityType":  "Account",
+                                                "EntityId":  "55a17108-242a-4643-b40c-eb7f0a3dc43c",
+                                                "UserId":  "55a17108-242a-4643-b40c-eb7f0a3dc43c"
+                                            }
+                                        ],
+                 "TalhaCRM_AspNetRoleClaims":  [
+
+                                               ],
+                 "TalhaCRM_LeadStatusHistory":  [
+
+                                                ],
+                 "TalhaCRM_AILeadInsights":  [
+                                                 {
+                                                     "ReasonJson":  "[\"Executive decision-maker engaged\",\"Budget confirmed within target range\",\"Clear timeline with planned launch next week\"]",
+                                                     "GeneratedAt":  "\/Date(1791836266007)\/",
+                                                     "Summary":  "High-intent lead with executive buy-in, confirmed budget fit (85,000 INR), and planned rollout next week.",
+                                                     "SuggestedResponse":  "Hi Ahmed, thank you for your time on our demonstration call. I have prepared our proposal and agreement as discussed. Are you available for a brief 10-minute check-in tomorrow at 11 AM?",
+                                                     "Provider":  "Groq",
+                                                     "Model":  "openai/gpt-oss-20b",
+                                                     "NextBestAction":  "Dispatch the master services agreement today and schedule a final onboarding call tomorrow morning.",
+                                                     "LeadId":  1,
+                                                     "Classification":  "Hot",
+                                                     "Urgency":  "High",
+                                                     "RiskLevel":  "Low",
+                                                     "InsightId":  1,
+                                                     "Score":  92
+                                                 }
+                                             ],
+                 "TalhaCRM_FollowUps":  [
+                                            {
+                                                "AssignedUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                "Type":  "Call",
+                                                "FollowUpId":  1,
+                                                "Notes":  "Call Ahmed to confirm quotation approval and discuss contract signing.",
+                                                "CompletedAt":  null,
+                                                "LeadId":  1,
+                                                "Status":  "Pending",
+                                                "DueAt":  "\/Date(1791850665970)\/"
+                                            },
+                                            {
+                                                "AssignedUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                "Type":  "Email",
+                                                "FollowUpId":  2,
+                                                "Notes":  "Follow up on proposal feedback sent yesterday.",
+                                                "CompletedAt":  "\/Date(1791844422783)\/",
+                                                "LeadId":  2,
+                                                "Status":  "Completed",
+                                                "DueAt":  "\/Date(1791829065970)\/"
+                                            },
+                                            {
+                                                "AssignedUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                "Type":  "Meeting",
+                                                "FollowUpId":  3,
+                                                "Notes":  "Executive finalization meeting with Desert Logistics leadership.",
+                                                "CompletedAt":  null,
+                                                "LeadId":  4,
+                                                "Status":  "Pending",
+                                                "DueAt":  "\/Date(1792016265970)\/"
+                                            }
+                                        ],
+                 "TalhaCRM_AspNetUserLogins":  [
+
+                                               ],
+                 "TalhaCRM_AspNetUserRoles":  [
+                                                  {
+                                                      "UserId":  "55a17108-242a-4643-b40c-eb7f0a3dc43c",
+                                                      "RoleId":  "15e3fd74-8632-4393-ba7c-b9f29cea4196"
+                                                  },
+                                                  {
+                                                      "UserId":  "ba8663f3-533d-434c-b580-8e8865b8f6b2",
+                                                      "RoleId":  "691f3549-1276-416d-a61d-15dabf864eae"
+                                                  },
+                                                  {
+                                                      "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                      "RoleId":  "add33267-0a8b-4cc3-9b57-24724dd1218e"
+                                                  }
+                                              ],
+                 "TalhaCRM_Notifications":  [
+                                                {
+                                                    "Message":  "Scheduled follow-up call with Ahmed Khan is due in 2 hours.",
+                                                    "CreatedAt":  "\/Date(1791841666061)\/",
+                                                    "LeadId":  1,
+                                                    "Title":  "Hot Lead Follow-up Due",
+                                                    "IsRead":  false,
+                                                    "NotificationId":  1,
+                                                    "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287"
+                                                },
+                                                {
+                                                    "Message":  "Follow-up email with Priya Sharma is past due by 4 hours.",
+                                                    "CreatedAt":  "\/Date(1791829066061)\/",
+                                                    "LeadId":  2,
+                                                    "Title":  "Overdue Follow-up Alert",
+                                                    "IsRead":  false,
+                                                    "NotificationId":  2,
+                                                    "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287"
+                                                }
+                                            ],
+                 "TalhaCRM_AspNetUserTokens":  [
+
+                                               ],
+                 "TalhaCRM_Leads":  [
+                                        {
+                                            "Priority":  "High",
+                                            "Name":  "Ahmed Khan",
+                                            "Company":  "AK Global Traders",
+                                            "Budget":  85000.00,
+                                            "LeadId":  1,
+                                            "Source":  "Instagram",
+                                            "CreatedAt":  "\/Date(1790979465407)\/",
+                                            "UpdatedAt":  "\/Date(1791832665407)\/",
+                                            "Status":  "Qualified",
+                                            "InterestedProduct":  "Full-Stack Custom ERP System",
+                                            "IsArchived":  false,
+                                            "Email":  "ahmed@example.com",
+                                            "OwnerUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                            "Phone":  "+91-9876543210"
+                                        },
+                                        {
+                                            "Priority":  "High",
+                                            "Name":  "Priya Sharma",
+                                            "Company":  "FinTech Solutions",
+                                            "Budget":  145000.00,
+                                            "LeadId":  2,
+                                            "Source":  "Website",
+                                            "CreatedAt":  "\/Date(1790547465407)\/",
+                                            "UpdatedAt":  "\/Date(1791844422911)\/",
+                                            "Status":  "Proposal",
+                                            "InterestedProduct":  "AI Analytics \u0026 Reporting Suite",
+                                            "IsArchived":  false,
+                                            "Email":  "priya.sharma@fintechpro.in",
+                                            "OwnerUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                            "Phone":  "+91-9823456789"
+                                        },
+                                        {
+                                            "Priority":  "Medium",
+                                            "Name":  "Michael Vance",
+                                            "Company":  "InnovateTech Inc",
+                                            "Budget":  60000.00,
+                                            "LeadId":  3,
+                                            "Source":  "Referral",
+                                            "CreatedAt":  "\/Date(1791497865407)\/",
+                                            "UpdatedAt":  "\/Date(1791670665407)\/",
+                                            "Status":  "Contacted",
+                                            "InterestedProduct":  "Customer Relationship Portal",
+                                            "IsArchived":  false,
+                                            "Email":  "mvance@innovatetech.com",
+                                            "OwnerUserId":  "ba8663f3-533d-434c-b580-8e8865b8f6b2",
+                                            "Phone":  "+1-415-555-0199"
+                                        },
+                                        {
+                                            "Priority":  "High",
+                                            "Name":  "Fatima Al-Sayed",
+                                            "Company":  "Desert Logistics Group",
+                                            "Budget":  210000.00,
+                                            "LeadId":  4,
+                                            "Source":  "LinkedIn",
+                                            "CreatedAt":  "\/Date(1789683465407)\/",
+                                            "UpdatedAt":  "\/Date(1791825465407)\/",
+                                            "Status":  "Negotiation",
+                                            "InterestedProduct":  "Enterprise Fleet CRM Integration",
+                                            "IsArchived":  false,
+                                            "Email":  "fatima@desertlogistics.ae",
+                                            "OwnerUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                            "Phone":  "+971-50-123-4567"
+                                        },
+                                        {
+                                            "Priority":  "Medium",
+                                            "Name":  "David Chen",
+                                            "Company":  "Chen Retail Network",
+                                            "Budget":  40000.00,
+                                            "LeadId":  5,
+                                            "Source":  "Website",
+                                            "CreatedAt":  "\/Date(1791814665407)\/",
+                                            "UpdatedAt":  "\/Date(1791814665407)\/",
+                                            "Status":  "New",
+                                            "InterestedProduct":  "E-Commerce Customer Workflow",
+                                            "IsArchived":  false,
+                                            "Email":  "david.chen@chenretail.com",
+                                            "OwnerUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                            "Phone":  "+1-212-555-7890"
+                                        },
+                                        {
+                                            "Priority":  "High",
+                                            "Name":  "Zainab Raza",
+                                            "Company":  "Raza Textiles Corp",
+                                            "Budget":  120000.00,
+                                            "LeadId":  6,
+                                            "Source":  "ColdCall",
+                                            "CreatedAt":  "\/Date(1789251465407)\/",
+                                            "UpdatedAt":  "\/Date(1791584265407)\/",
+                                            "Status":  "Converted",
+                                            "InterestedProduct":  "Inventory \u0026 B2B Order Booking",
+                                            "IsArchived":  false,
+                                            "Email":  "zainab@razatextiles.com",
+                                            "OwnerUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                            "Phone":  "+91-9765432109"
+                                        },
+                                        {
+                                            "Priority":  "Low",
+                                            "Name":  "Robert Taylor",
+                                            "Company":  "Taylor Advisory",
+                                            "Budget":  25000.00,
+                                            "LeadId":  7,
+                                            "Source":  "EmailCampaign",
+                                            "CreatedAt":  "\/Date(1788387465407)\/",
+                                            "UpdatedAt":  "\/Date(1790979465407)\/",
+                                            "Status":  "Lost",
+                                            "InterestedProduct":  "Consulting Client Tracker",
+                                            "IsArchived":  false,
+                                            "Email":  "rtaylor@tayloradvisory.co.uk",
+                                            "OwnerUserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                            "Phone":  "+44-20-7946-0912"
+                                        }
+                                    ],
+                 "TalhaCRM_AspNetRoles":  [
+                                              {
+                                                  "ConcurrencyStamp":  null,
+                                                  "Name":  "Admin",
+                                                  "Id":  "15e3fd74-8632-4393-ba7c-b9f29cea4196",
+                                                  "NormalizedName":  "ADMIN"
+                                              },
+                                              {
+                                                  "ConcurrencyStamp":  null,
+                                                  "Name":  "Manager",
+                                                  "Id":  "691f3549-1276-416d-a61d-15dabf864eae",
+                                                  "NormalizedName":  "MANAGER"
+                                              },
+                                              {
+                                                  "ConcurrencyStamp":  null,
+                                                  "Name":  "SalesExecutive",
+                                                  "Id":  "add33267-0a8b-4cc3-9b57-24724dd1218e",
+                                                  "NormalizedName":  "SALESEXECUTIVE"
+                                              }
+                                          ],
+                 "TalhaCRM_LeadActivities":  [
+                                                 {
+                                                     "ActivityId":  1,
+                                                     "Description":  "Introductory discovery call. Ahmed expressed immediate interest in ERP automation for his 40-person team.",
+                                                     "Type":  "Call",
+                                                     "LeadId":  1,
+                                                     "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                     "OccurredAt":  "\/Date(1791065865924)\/"
+                                                 },
+                                                 {
+                                                     "ActivityId":  2,
+                                                     "Description":  "Technical demonstration of core CRM/ERP features conducted via Google Meet. Budget approved by board.",
+                                                     "Type":  "Meeting",
+                                                     "LeadId":  1,
+                                                     "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                     "OccurredAt":  "\/Date(1791584265924)\/"
+                                                 },
+                                                 {
+                                                     "ActivityId":  3,
+                                                     "Description":  "Sent formal commercial proposal document covering SLA, milestones, and integration terms.",
+                                                     "Type":  "Email",
+                                                     "LeadId":  2,
+                                                     "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                     "OccurredAt":  "\/Date(1791757065924)\/"
+                                                 },
+                                                 {
+                                                     "ActivityId":  4,
+                                                     "Description":  "Negotiated 5% enterprise volume discount. Waiting on legal procurement sign-off by Thursday.",
+                                                     "Type":  "Call",
+                                                     "LeadId":  4,
+                                                     "UserId":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                     "OccurredAt":  "\/Date(1791821865924)\/"
+                                                 },
+                                                 {
+                                                     "ActivityId":  5,
+                                                     "Description":  "Follow-up completed: grg",
+                                                     "Type":  "Email",
+                                                     "LeadId":  2,
+                                                     "UserId":  "ba8663f3-533d-434c-b580-8e8865b8f6b2",
+                                                     "OccurredAt":  "\/Date(1791844422785)\/"
+                                                 }
+                                             ],
+                 "TalhaCRM_EFMigrationsHistory":  [
+                                                      {
+                                                          "ProductVersion":  "8.0.29",
+                                                          "MigrationId":  "20261013032739_InitialCrmBaseline"
+                                                      }
+                                                  ],
+                 "TalhaCRM_AspNetUsers":  [
+                                              {
+                                                  "LockoutEnd":  null,
+                                                  "Id":  "55a17108-242a-4643-b40c-eb7f0a3dc43c",
+                                                  "CreatedAt":  "\/Date(1791843454737)\/",
+                                                  "IsActive":  null,
+                                                  "UserName":  "admin@crm.local",
+                                                  "EmailConfirmed":  null,
+                                                  "LockoutEnabled":  null,
+                                                  "NormalizedEmail":  "ADMIN@CRM.LOCAL",
+                                                  "ConcurrencyStamp":  "7a602c40-0fc9-48b2-8dd4-d214e2d1f886",
+                                                  "PasswordHash":  "AQAAAAIAAYagAAAAEIp50dKsSDYb5kdF0y7aDv1IhfyJwO9fBKngiOZqFQ8gN83+dHgb63mysC3IwzljMQ==",
+                                                  "PhoneNumberConfirmed":  false,
+                                                  "SecurityStamp":  "IFJ2CVOEVQAUWIQ6R7HYYKRZXX3GLKKR",
+                                                  "NormalizedUserName":  "ADMIN@CRM.LOCAL",
+                                                  "FullName":  "Talha Shaikh (Admin)",
+                                                  "TwoFactorEnabled":  false,
+                                                  "AccessFailedCount":  0,
+                                                  "PhoneNumber":  null,
+                                                  "Email":  "admin@crm.local"
+                                              },
+                                              {
+                                                  "LockoutEnd":  null,
+                                                  "Id":  "ba8663f3-533d-434c-b580-8e8865b8f6b2",
+                                                  "CreatedAt":  "\/Date(1791843458508)\/",
+                                                  "IsActive":  null,
+                                                  "UserName":  "manager@crm.local",
+                                                  "EmailConfirmed":  null,
+                                                  "LockoutEnabled":  null,
+                                                  "NormalizedEmail":  "MANAGER@CRM.LOCAL",
+                                                  "ConcurrencyStamp":  "207a8565-ff3f-4802-8ed8-2951f7beb3a9",
+                                                  "PasswordHash":  "AQAAAAIAAYagAAAAEBXX3nDIA7ebqapR0Xlz91SoIemGFfdtc/wuzyN03eeyPzSRKN1B0bMrUtV0sxxe/Q==",
+                                                  "PhoneNumberConfirmed":  false,
+                                                  "SecurityStamp":  "ZLRGU5GYENX22LQCNQVLQAIW5I4UQUJJ",
+                                                  "NormalizedUserName":  "MANAGER@CRM.LOCAL",
+                                                  "FullName":  "Sarah Connor (Manager)",
+                                                  "TwoFactorEnabled":  false,
+                                                  "AccessFailedCount":  0,
+                                                  "PhoneNumber":  null,
+                                                  "Email":  "manager@crm.local"
+                                              },
+                                              {
+                                                  "LockoutEnd":  null,
+                                                  "Id":  "ccb22bd9-2491-451f-abc1-b59ba1ec0287",
+                                                  "CreatedAt":  "\/Date(1791843461936)\/",
+                                                  "IsActive":  null,
+                                                  "UserName":  "sales@crm.local",
+                                                  "EmailConfirmed":  null,
+                                                  "LockoutEnabled":  null,
+                                                  "NormalizedEmail":  "SALES@CRM.LOCAL",
+                                                  "ConcurrencyStamp":  "592bbbf7-1a89-4543-bec6-3a645639d03f",
+                                                  "PasswordHash":  "AQAAAAIAAYagAAAAEKBbX4SoI7TA6BaDhbjkjGz+iTQlv92IL3lZkrNgTCiZvqrvRlRsVVz5rN5PiLfQpw==",
+                                                  "PhoneNumberConfirmed":  false,
+                                                  "SecurityStamp":  "6R6DJ2SKK7NWMMF3YSCLRVJH2BMVAK36",
+                                                  "NormalizedUserName":  "SALES@CRM.LOCAL",
+                                                  "FullName":  "Alex Rivera (Sales Exec)",
+                                                  "TwoFactorEnabled":  false,
+                                                  "AccessFailedCount":  0,
+                                                  "PhoneNumber":  null,
+                                                  "Email":  "sales@crm.local"
+                                              }
+                                          ],
+                 "TalhaCRM_AspNetUserClaims":  [
+
+                                               ]
+             },
+    "Database":  "AITStudentDB"
+}
