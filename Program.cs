@@ -221,6 +221,7 @@ builder.Services.AddScoped<IAuthorizationHandler, FollowUpOwnershipHandler>();
 // ------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ISystemSecurityContext, SystemSecurityContext>();
+builder.Services.AddSingleton<IBackgroundJobScopeFactory, BackgroundJobScopeFactory>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ISubscriptionQuotaService, SubscriptionQuotaService>();

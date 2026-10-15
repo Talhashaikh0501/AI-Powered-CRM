@@ -230,11 +230,14 @@ namespace AIPoweredCRM.Tests
             await setupContext.SaveChangesAsync();
 
             // Launch two concurrent approval tasks against real SQL Server
+            using var barrier = new System.Threading.Barrier(2);
+
             var task1 = Task.Run(async () =>
             {
                 using var ctx1 = CreateDbContext();
                 ctx1.IgnoreTenantFilter = true;
                 var t1 = await ctx1.SupportAccessTickets.FirstAsync(t => t.TicketId == ticketId);
+                barrier.SignalAndWait();
                 t1.Status = "Approved";
                 t1.ApprovedByUserId = "admin-1";
                 t1.ApprovedAt = DateTime.UtcNow;
@@ -247,6 +250,7 @@ namespace AIPoweredCRM.Tests
                 using var ctx2 = CreateDbContext();
                 ctx2.IgnoreTenantFilter = true;
                 var t2 = await ctx2.SupportAccessTickets.FirstAsync(t => t.TicketId == ticketId);
+                barrier.SignalAndWait();
                 t2.Status = "Approved";
                 t2.ApprovedByUserId = "admin-2";
                 t2.ApprovedAt = DateTime.UtcNow;

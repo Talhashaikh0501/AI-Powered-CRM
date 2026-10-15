@@ -677,8 +677,10 @@ namespace AIPoweredCRM.Tests
             // Clear HTTP context to simulate a background job
             httpContextAccessor.HttpContext = null;
 
+            var jobScopeFactory = scope.ServiceProvider.GetRequiredService<IBackgroundJobScopeFactory>();
+
             // System automated job revokes expired ticket within an authorized system scope
-            using (systemSecurity.BeginSystemScope("AutomatedTicketExpiryBackgroundJob"))
+            using (jobScopeFactory.CreateJobScope("AutomatedTicketExpiryBackgroundJob"))
             {
                 var revokedTicket = await service.RevokeTicketAsync(ticket.TicketId, "Automated expiry revocation");
                 Assert.Equal("Revoked", revokedTicket.Status);
@@ -701,7 +703,7 @@ namespace AIPoweredCRM.Tests
             httpContextAccessor.HttpContext = CreateHttpContext(requester, "CompanyAdmin");
 
             var service = scope.ServiceProvider.GetRequiredService<ISupportAccessService>();
-            var systemSecurity = scope.ServiceProvider.GetRequiredService<ISystemSecurityContext>();
+            var jobScopeFactory = scope.ServiceProvider.GetRequiredService<IBackgroundJobScopeFactory>();
 
             var ticket = await service.CreateTicketAsync(
                 tenantId,
@@ -711,7 +713,7 @@ namespace AIPoweredCRM.Tests
             httpContextAccessor.HttpContext = null;
 
             // System execution context CANNOT approve delegated support access tickets
-            using (systemSecurity.BeginSystemScope("MaliciousOrAutomatedApproval"))
+            using (jobScopeFactory.CreateJobScope("MaliciousOrAutomatedApproval"))
             {
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                     service.ApproveTicketAsync(ticket.TicketId, TimeSpan.FromHours(1)));

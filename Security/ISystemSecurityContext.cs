@@ -6,6 +6,6 @@ namespace AI_Powered_CRM.Security
     {
         bool IsSystemExecution { get; }
         string? SystemExecutionReason { get; }
-        IDisposable BeginSystemScope(string reason);
+        IDisposable BeginSystemScope(string reason, string? authorizationToken = null);
     }
 }

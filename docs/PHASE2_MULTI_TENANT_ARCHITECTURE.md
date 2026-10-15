@@ -555,6 +555,105 @@ WHERE NOT EXISTS (
 COMMIT TRANSACTION;
 ```
 
+### 6.3 Verified Live Database Backup Plan & Pre-Flight Checklist
+
+Before applying any schema changes or migrations to the live database, execute the following verified backup protocol:
+
+1. **Native SQL Server Compressed Backup:**
+   Execute the following T-SQL command on SQL Server (adjusting the database name and path according to your production deployment):
+   ```sql
+   BACKUP DATABASE [AI_Powered_CRM]
+   TO DISK = N'C:\Backups\AI_Powered_CRM_PrePhase2_20261016.bak'
+   WITH COPY_ONLY, CHECKSUM, COMPRESSION, STATS = 10;
+   ```
+2. **Verify Backup File Integrity:**
+   ```sql
+   RESTORE VERIFYONLY
+   FROM DISK = N'C:\Backups\AI_Powered_CRM_PrePhase2_20261016.bak'
+   WITH CHECKSUM;
+   ```
+3. **Capture Pre-Migration Baseline Row Counts:**
+   Save the output of this query before migration:
+   ```sql
+   SELECT 
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_AspNetUsers) AS PreUsers,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_AspNetRoles) AS PreRoles,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_AspNetUserRoles) AS PreUserRoles,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_Leads) AS PreLeads,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_LeadActivities) AS PreActivities,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_FollowUps) AS PreFollowUps,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_LeadStatusHistory) AS PreHistory,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_AILeadInsights) AS PreInsights,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_Notifications) AS PreNotifications,
+       (SELECT COUNT(*) FROM dbo.TalhaCRM_AuditLogs) AS PreAudits;
+   ```
+
+### 6.4 Post-Migration Verification Queries
+
+Immediately after migration execution, execute these validation queries:
+
+```sql
+-- 1. Verify Zero Record Loss
+SELECT 
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_AspNetUsers) AS PostUsers,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_Leads) AS PostLeads,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_LeadActivities) AS PostActivities,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_FollowUps) AS PostFollowUps,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_LeadStatusHistory) AS PostHistory,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_AILeadInsights) AS PostInsights,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_Notifications) AS PostNotifications,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_AuditLogs) AS PostAudits;
+
+-- 2. Verify Zero NULL or Orphaned TenantId Values
+SELECT 
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_Leads WHERE TenantId IS NULL OR TenantId != '11111111-1111-1111-1111-111111111111') AS InvalidLeads,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_LeadActivities WHERE TenantId IS NULL OR TenantId != '11111111-1111-1111-1111-111111111111') AS InvalidActivities,
+    (SELECT COUNT(*) FROM dbo.TalhaCRM_FollowUps WHERE TenantId IS NULL OR TenantId != '11111111-1111-1111-1111-111111111111') AS InvalidFollowUps;
+
+-- 3. Verify Primary Tenant & Settings Created with INR
+SELECT TenantId, CompanyName, Slug, DefaultCurrency, IsActive 
+FROM dbo.TalhaCRM_Tenants 
+WHERE TenantId = '11111111-1111-1111-1111-111111111111';
+
+SELECT TenantId, CurrencyCode, CurrencySymbol, TimeZoneId 
+FROM dbo.TalhaCRM_TenantSettings 
+WHERE TenantId = '11111111-1111-1111-1111-111111111111';
+
+-- 4. Verify Identity Role Mappings in Tenant Memberships
+SELECT tm.UserId, u.Email, tm.CompanyRole, tm.IsActive 
+FROM dbo.TalhaCRM_TenantMemberships tm
+JOIN dbo.TalhaCRM_AspNetUsers u ON tm.UserId = u.Id;
+
+-- 5. Confirm Platform SuperAdmins have ZERO company memberships
+SELECT COUNT(*) AS IllegalSuperAdminMemberships
+FROM dbo.TalhaCRM_TenantMemberships tm
+JOIN dbo.TalhaCRM_AspNetUserRoles ur ON tm.UserId = ur.UserId
+JOIN dbo.TalhaCRM_AspNetRoles r ON ur.RoleId = r.Id
+WHERE r.Name IN ('PlatformSuperAdmin', 'SuperAdmin');
+-- (Must return 0)
+```
+
+### 6.5 Safe Rollback Plan
+
+If an unexpected condition occurs during live deployment:
+
+1. **Option 1: Controlled EF Core Migration Rollback**
+   If the migration was applied via EF Core CLI and the database is still in a responsive state:
+   ```powershell
+   dotnet ef database update 20261013032739_InitialCrmBaseline
+   ```
+   This executes `Phase2MultiTenantCore.Down()`, which drops foreign keys, tables (`TalhaCRM_Tenants`, `TalhaCRM_TenantMemberships`, `TalhaCRM_TenantSettings`, `TalhaCRM_TenantInvitations`, `TalhaCRM_SupportAccessTickets`), and drops the `TenantId` columns from the domain tables, returning the database schema to the exact Phase 1 baseline.
+
+2. **Option 2: Native SQL Server Database Restore**
+   If an unrecoverable failure occurs or data integrity is compromised:
+   ```sql
+   ALTER DATABASE [AI_Powered_CRM] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+   RESTORE DATABASE [AI_Powered_CRM]
+   FROM DISK = N'C:\Backups\AI_Powered_CRM_PrePhase2_20261016.bak'
+   WITH REPLACE;
+   ALTER DATABASE [AI_Powered_CRM] SET MULTI_USER;
+   ```
+
 ---
 
 ## 7. Review of Legacy Revenue-Property Compatibility
@@ -664,21 +763,30 @@ public interface ISubscriptionQuotaService
   - Implemented `POST /Account/RegisterCompany` (creates company + founder admin membership).
   - Implemented employee invitation and password-setup onboarding.
 - [x] **Step 7: Testing & Verification**
-  - Built `TenantIsolationTests` covering cross-tenant lead, activity, follow-up, report, and AI isolation.
-  - Built `HttpSecurityIntegrationTests` verifying header spoofing defenses, inactive membership rejection (403), suspended tenant rejection (403), server-verified support access tickets (403 without ticket, 403 on forged ticket, 403 on pending ticket, 403 on expired ticket, 403 on mismatched/unassigned SuperAdmin, 200 with approved ticket), fail-closed audit failures (500), and cross-tenant update rejection.
+  - Built `TenantIsolationTests` (10 tests) covering cross-tenant lead, activity, follow-up, report, and AI isolation.
+  - Built `HttpSecurityIntegrationTests` (18 tests) verifying header spoofing defenses, inactive membership rejection (403), suspended tenant rejection (403), server-verified support access tickets (403 without ticket, 403 on forged ticket, 403 on pending ticket, 403 on expired ticket, 403 on mismatched/unassigned SuperAdmin, 200 with approved ticket), fail-closed audit failures (500), and cross-tenant update rejection.
   - Hardened `SupportAccessService` with trusted server-side authentication (`IHttpContextAccessor` / `ClaimsPrincipal`), strict tenant/platform authority verification (CompanyAdmin of target tenant or independent SuperAdmin only; SalesExecutive and cross-tenant admins rejected), and anti-self-approval enforcement.
   - Completely eliminated unauthenticated client-supplied user ID fallbacks. Introduced `ISystemSecurityContext` with ambient, thread-safe `AsyncLocal<string?>` execution scopes for authorized automated operations, while strictly prohibiting automated systems from approving tickets (`InvalidOperationException`).
+  - Restricted `BeginSystemScope` to authorized background-job infrastructure (`IBackgroundJobScopeFactory`) using cryptographic token verification, and strictly prohibited elevation from interactive HTTP request contexts (`SecurityException`).
   - Added strict anti-identity-spoofing assertions throwing `SecurityException` if a caller attempts to assert an identity different from the server-authenticated principal.
   - Implemented atomic transactions and single-save consistency across ticket creation, approval, and revocation with automatic rollback and in-memory entity state resets if audit log persistence fails.
   - Added optimistic concurrency token (`[ConcurrencyCheck]` and `.IsConcurrencyToken()` on `Status`) preventing double-approval race conditions.
   - Built `SupportAccessServiceTests` (18 tests) verifying ticket lifecycle, unassigned ticket rejection, self-approval prevention, unauthorized role rejection, inactive user rejection, cross-tenant approval rejection, ticket expiry, concurrent approval protection with strict winning/losing assertions, server identity verification, and atomic rollback on audit failure.
+  - Built `SystemSecurityScopeTests` (6 tests) verifying unauthorized elevation rejection from interactive HTTP request contexts, invalid or missing infrastructure token rejection, argument validation, and authorized background-job execution via `IBackgroundJobScopeFactory`.
   - Built `SqlServerSupportAccessIntegrationTests` (4 tests) executing against an isolated local SQL Server instance (`(localdb)\MSSQLLocalDB`):
     - `TC_SQL_001`: EF Core Phase 2 migration cleanly creates all tables, foreign keys, and indexes in real SQL Server.
     - `TC_SQL_002`: Atomic transaction rollback on audit failure in real SQL Server, preserving state consistency.
     - `TC_SQL_003`: Optimistic concurrency token race condition on real SQL Server, proving exactly one concurrent approval succeeds and the losing task receives `DbUpdateConcurrencyException`.
     - `TC_SQL_004`: Real SQL Server global query filter and cross-tenant write isolation.
+  - Built `SqlServerLegacyMigrationIntegrationTests` (1 comprehensive test) testing end-to-end migration on an isolated, restored copy of the existing SQL Server database with real legacy users, dual-role mappings, platform superadmins, leads, activities, follow-ups, and audit records:
+    - Verified 100% record preservation (zero data loss across all tables).
+    - Verified `TenantId` backfilled to primary tenant `11111111-1111-1111-1111-111111111111`.
+    - Verified `Admin` mapped to `CompanyAdmin`, dual roles resolved to highest role `Manager`, `SalesExecutive` mapped to `SalesExecutive`, and `PlatformSuperAdmin` excluded from company memberships.
+    - Verified primary tenant and settings created with default currency `INR`.
+    - Verified foreign keys created and valid.
+    - Verified EF Core query filters and tenant isolation against migrated data.
   - Enforced `[Authorize(Policy = "TenantRequired")]` across all CRM MVC and REST API controllers.
-  - Executed `dotnet test`: **76 Passed**, **0 Failed**, **0 Skipped** (100% pass rate).
+  - Executed `dotnet test`: **83 Passed**, **0 Failed**, **0 Skipped** (100% pass rate).
 - [ ] **Step 8: Live SQL Server Database Migration** *(Pending User Approval)*
   - User reviews the backup checklist, idempotent SQL script preview (`docs/phase2_migration_preview.sql`), verification queries, and rollback plan.
   - User issues explicit approval before applying `dotnet ef database update` to live SQL Server.
@@ -686,8 +794,8 @@ public interface ISubscriptionQuotaService
 ---
 
 ### Verification Summary
-- **Total Tests Executed:** 76
-- **Passed:** 76 (100%)
+- **Total Tests Executed:** 83
+- **Passed:** 83 (100%)
 - **Failed:** 0
 - **Skipped:** 0
 - **Duration:** ~7 seconds
