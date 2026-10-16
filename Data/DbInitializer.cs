@@ -142,6 +142,9 @@ namespace AI_Powered_CRM.Data
             // -------------------------------------------------------------------------
             // Platform SuperAdmin First-Time Bootstrap Provisioning (Config / Env-Driven)
             // -------------------------------------------------------------------------
+            var logger = scope.ServiceProvider.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?
+                .CreateLogger("DbInitializer");
+
             var superAdminEmail = config?["Security:SuperAdminBootstrap:Email"]
                                ?? Environment.GetEnvironmentVariable("CRM_SUPERADMIN_EMAIL");
             var superAdminPass  = config?["Security:SuperAdminBootstrap:Password"]
@@ -153,9 +156,51 @@ namespace AI_Powered_CRM.Data
             if (!string.IsNullOrWhiteSpace(superAdminEmail) && !string.IsNullOrWhiteSpace(superAdminPass))
             {
                 var cleanEmail = superAdminEmail.Trim();
-                var existingSuperAdmin = await userManager.FindByEmailAsync(cleanEmail);
-                if (existingSuperAdmin == null)
+                var existingUser = await userManager.FindByEmailAsync(cleanEmail);
+
+                if (existingUser != null)
                 {
+                    // Check if the collided account is associated with any customer tenant
+                    context.IgnoreTenantFilter = true;
+                    var hasTenantMembership = await context.TenantMemberships
+                        .IgnoreQueryFilters()
+                        .AnyAsync(m => m.UserId == existingUser.Id);
+
+                    if (hasTenantMembership)
+                    {
+                        // STRICT PROHIBITION: Never automatically elevate an existing tenant user / CompanyAdmin.
+                        logger?.LogCritical(
+                            "SECURITY ALERT: PlatformSuperAdmin bootstrap collided with existing tenant account '{Email}' (UserId: {UserId}). " +
+                            "Automatic elevation rejected to maintain strict isolation between platform operators and customer workspaces.",
+                            cleanEmail, existingUser.Id);
+                    }
+                    else
+                    {
+                        // User exists and has zero tenant memberships.
+                        var isPlatformSuperAdmin = await userManager.IsInRoleAsync(existingUser, "PlatformSuperAdmin");
+                        if (isPlatformSuperAdmin)
+                        {
+                            // Safe idempotent re-run: already provisioned as dedicated PlatformSuperAdmin.
+                            if (!await userManager.IsInRoleAsync(existingUser, "SuperAdmin"))
+                            {
+                                await userManager.AddToRoleAsync(existingUser, "SuperAdmin");
+                            }
+                            logger?.LogInformation("Dedicated PlatformSuperAdmin '{Email}' is already configured. Bootstrap skipped safely.", cleanEmail);
+                        }
+                        else
+                        {
+                            // Existing non-tenant user lacks PlatformSuperAdmin role.
+                            // Reject auto-elevation to prevent unintended privilege escalation.
+                            logger?.LogWarning(
+                                "PlatformSuperAdmin bootstrap collision: account '{Email}' exists without PlatformSuperAdmin role. " +
+                                "Automatic elevation rejected. SuperAdmin accounts must be provisioned freshly.",
+                                cleanEmail);
+                        }
+                    }
+                }
+                else
+                {
+                    // Clean provisioning of new dedicated PlatformSuperAdmin identity
                     var superAdminUser = new ApplicationUser
                     {
                         UserName = cleanEmail,
@@ -169,20 +214,24 @@ namespace AI_Powered_CRM.Data
                     var createResult = await userManager.CreateAsync(superAdminUser, superAdminPass);
                     if (createResult.Succeeded)
                     {
-                        await userManager.AddToRoleAsync(superAdminUser, "PlatformSuperAdmin");
-                        await userManager.AddToRoleAsync(superAdminUser, "SuperAdmin");
-                        // Platform SuperAdmin MUST NEVER have TenantMembership to maintain strict separation
+                        var role1Result = await userManager.AddToRoleAsync(superAdminUser, "PlatformSuperAdmin");
+                        var role2Result = await userManager.AddToRoleAsync(superAdminUser, "SuperAdmin");
+
+                        if (!role1Result.Succeeded || !role2Result.Succeeded)
+                        {
+                            var roleErrors = string.Join(", ", role1Result.Errors.Concat(role2Result.Errors).Select(e => e.Description));
+                            logger?.LogError("Failed to assign PlatformSuperAdmin / SuperAdmin roles to '{Email}': {Errors}", cleanEmail, roleErrors);
+                        }
+                        else
+                        {
+                            logger?.LogInformation("Successfully bootstrapped dedicated PlatformSuperAdmin '{Email}'.", cleanEmail);
+                        }
+                        // Guarantee: Platform SuperAdmin MUST NEVER have TenantMembership
                     }
-                }
-                else
-                {
-                    if (!await userManager.IsInRoleAsync(existingSuperAdmin, "PlatformSuperAdmin"))
+                    else
                     {
-                        await userManager.AddToRoleAsync(existingSuperAdmin, "PlatformSuperAdmin");
-                    }
-                    if (!await userManager.IsInRoleAsync(existingSuperAdmin, "SuperAdmin"))
-                    {
-                        await userManager.AddToRoleAsync(existingSuperAdmin, "SuperAdmin");
+                        var createErrors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+                        logger?.LogError("Failed to create PlatformSuperAdmin account '{Email}': {Errors}", cleanEmail, createErrors);
                     }
                 }
             }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,7 @@ namespace AI_Powered_CRM.Services.Implementations
         private readonly IAuditService _auditService;
         private readonly ILogger<LeadAssignmentService> _logger;
 
-        // Per-tenant concurrency locks ensuring synchronized, deadlock-free queueing
+        // In-process per-tenant synchronization locks
         private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> _tenantLocks = new();
 
         // In-flight workload reservations tracking uncommitted concurrent assignments per tenant
@@ -36,7 +37,74 @@ namespace AI_Powered_CRM.Services.Implementations
             _logger = logger;
         }
 
-        public async Task<string> DetermineLeadOwnerAsync(Guid tenantId, string? requestedOwnerId, string defaultUserId)
+        public async Task<IAsyncDisposable> AcquireTenantAssignmentLockAsync(Guid tenantId, TimeSpan? timeout = null)
+        {
+            var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(15);
+
+            // 1. Acquire local semaphore
+            var localLock = _tenantLocks.GetOrAdd(tenantId, _ => new SemaphoreSlim(1, 1));
+            var acquiredLocal = await localLock.WaitAsync(effectiveTimeout);
+            if (!acquiredLocal)
+            {
+                throw new TimeoutException($"Timed out waiting for local concurrency lock for tenant {tenantId}.");
+            }
+
+            var isSqlServer = _db.Database.IsSqlServer();
+            bool sqlLockAcquired = false;
+
+            if (isSqlServer)
+            {
+                try
+                {
+                    var conn = _db.Database.GetDbConnection();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        await conn.OpenAsync();
+                    }
+
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = @"
+                        DECLARE @res int;
+                        EXEC @res = sp_getapplock 
+                            @Resource = @Resource, 
+                            @LockMode = 'Exclusive', 
+                            @LockOwner = 'Session', 
+                            @LockTimeout = @Timeout;
+                        SELECT @res;";
+
+                    var pResource = cmd.CreateParameter();
+                    pResource.ParameterName = "@Resource";
+                    pResource.Value = $"TalhaCRM_Assign_{tenantId:N}";
+                    cmd.Parameters.Add(pResource);
+
+                    var pTimeout = cmd.CreateParameter();
+                    pTimeout.ParameterName = "@Timeout";
+                    pTimeout.Value = (int)effectiveTimeout.TotalMilliseconds;
+                    cmd.Parameters.Add(pTimeout);
+
+                    var result = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                    if (result < 0)
+                    {
+                        localLock.Release();
+                        throw new TimeoutException($"Failed to acquire SQL Server distributed lock for tenant {tenantId}. sp_getapplock return code: {result}.");
+                    }
+
+                    sqlLockAcquired = true;
+                }
+                catch (Exception ex) when (ex is not TimeoutException)
+                {
+                    _logger.LogWarning(ex, "Failed to invoke SQL Server sp_getapplock for tenant {TenantId}. Operating with in-process lock fallback.", tenantId);
+                }
+            }
+
+            return new TenantAssignmentLockScope(
+                tenantId,
+                localLock,
+                sqlLockAcquired ? _db : null,
+                _logger);
+        }
+
+        public async Task<string> DetermineLeadOwnerAsync(Guid tenantId, string? requestedOwnerId, string defaultUserId, bool acquireLock = true)
         {
             // 1. If explicit owner requested, verify they are an active member in this tenant
             if (!string.IsNullOrWhiteSpace(requestedOwnerId))
@@ -72,118 +140,121 @@ namespace AI_Powered_CRM.Services.Implementations
                 return defaultUserId;
             }
 
-            // 3. Acquire tenant-specific synchronization lock to ensure strictly concurrency-safe rotation
-            var tenantLock = _tenantLocks.GetOrAdd(tenantId, _ => new SemaphoreSlim(1, 1));
-            await tenantLock.WaitAsync();
-
-            try
+            // 3. Acquire tenant assignment lock if requested, or execute under caller's existing lock
+            if (acquireLock)
             {
-                // 4. Round-Robin Distribution among active Sales Representatives
-                var salesRepIds = await _db.TenantMemberships
+                await using (await AcquireTenantAssignmentLockAsync(tenantId))
+                {
+                    return await ExecuteRoundRobinSelectionAsync(tenantId, defaultUserId);
+                }
+            }
+
+            return await ExecuteRoundRobinSelectionAsync(tenantId, defaultUserId);
+        }
+
+        private async Task<string> ExecuteRoundRobinSelectionAsync(Guid tenantId, string defaultUserId)
+        {
+            // Fetch active sales executives
+            var salesRepIds = await _db.TenantMemberships
+                .IgnoreQueryFilters()
+                .Where(m => m.TenantId == tenantId && m.IsActive && m.CompanyRole == CompanyRole.SalesExecutive)
+                .Select(m => m.UserId)
+                .ToListAsync();
+
+            // Fallback: If no dedicated SalesExecutives found, expand to all active tenant members
+            if (!salesRepIds.Any())
+            {
+                salesRepIds = await _db.TenantMemberships
                     .IgnoreQueryFilters()
-                    .Where(m => m.TenantId == tenantId && m.IsActive && m.CompanyRole == CompanyRole.SalesExecutive)
+                    .Where(m => m.TenantId == tenantId && m.IsActive)
                     .Select(m => m.UserId)
                     .ToListAsync();
-
-                // Fallback: If no dedicated SalesExecutives found, expand to all active tenant members
-                if (!salesRepIds.Any())
-                {
-                    salesRepIds = await _db.TenantMemberships
-                        .IgnoreQueryFilters()
-                        .Where(m => m.TenantId == tenantId && m.IsActive)
-                        .Select(m => m.UserId)
-                        .ToListAsync();
-                }
-
-                if (!salesRepIds.Any())
-                {
-                    _logger.LogWarning("No active members found in tenant {TenantId} for RoundRobin assignment. Using default user {DefaultUserId}.",
-                        tenantId, defaultUserId);
-                    return defaultUserId;
-                }
-
-                // Filter by active ApplicationUser accounts
-                var activeCandidates = await _db.Users
-                    .AsNoTracking()
-                    .Where(u => salesRepIds.Contains(u.Id) && u.IsActive)
-                    .Select(u => u.Id)
-                    .ToListAsync();
-
-                if (!activeCandidates.Any())
-                {
-                    return defaultUserId;
-                }
-
-                // 5. Calculate active workload and recency of assignment from database
-                var candidateWorkloads = await _db.Leads
-                    .IgnoreQueryFilters()
-                    .Where(l => l.TenantId == tenantId && !l.IsArchived &&
-                                l.Status != LeadStatus.Converted && l.Status != LeadStatus.Lost &&
-                                l.OwnerUserId != null && activeCandidates.Contains(l.OwnerUserId))
-                    .GroupBy(l => l.OwnerUserId!)
-                    .Select(g => new
-                    {
-                        UserId = g.Key,
-                        ActiveCount = g.Count(),
-                        LastAssignedAt = g.Max(l => l.CreatedAt)
-                    })
-                    .ToListAsync();
-
-                var inFlightLoads = _inFlightTenantLoads.GetOrAdd(tenantId, _ => new ConcurrentDictionary<string, int>());
-                var inFlightTimes = _inFlightLastAssigned.GetOrAdd(tenantId, _ => new ConcurrentDictionary<string, DateTime>());
-
-                // Merge persistent database workload with in-flight uncommitted reservations
-                var candidateStats = activeCandidates.Select(userId =>
-                {
-                    var work = candidateWorkloads.FirstOrDefault(w => w.UserId == userId);
-                    var dbCount = work?.ActiveCount ?? 0;
-                    var extraCount = inFlightLoads.TryGetValue(userId, out var extra) ? extra : 0;
-                    var effectiveActiveCount = dbCount + extraCount;
-
-                    var dbLastAssigned = work?.LastAssignedAt ?? DateTime.MinValue;
-                    var memLastAssigned = inFlightTimes.TryGetValue(userId, out var dt) ? dt : DateTime.MinValue;
-                    var effectiveLastAssigned = memLastAssigned > dbLastAssigned ? memLastAssigned : dbLastAssigned;
-
-                    return new
-                    {
-                        UserId = userId,
-                        ActiveCount = effectiveActiveCount,
-                        LastAssignedAt = effectiveLastAssigned
-                    };
-                })
-                // Sort: Least loaded first, then least recently assigned, then stable UserId tie-breaker
-                .OrderBy(c => c.ActiveCount)
-                .ThenBy(c => c.LastAssignedAt)
-                .ThenBy(c => c.UserId)
-                .ToList();
-
-                var selected = candidateStats.First().UserId;
-
-                // Mark in-flight reservation immediately to prevent any concurrent assignment collisions
-                inFlightLoads.AddOrUpdate(selected, 1, (_, current) => current + 1);
-                inFlightTimes[selected] = DateTime.UtcNow;
-
-                await _auditService.LogAsync(
-                    defaultUserId,
-                    "Tenant",
-                    tenantId.ToString(),
-                    "LeadAssignedRoundRobin",
-                    new
-                    {
-                        AssignedUserId = selected,
-                        CandidateCount = activeCandidates.Count,
-                        SelectedEffectiveActiveCount = candidateStats.First().ActiveCount
-                    });
-
-                _logger.LogInformation("Concurrency-safe RoundRobin assignment in tenant {TenantId}: assigned to {UserId} out of {Count} candidates.",
-                    tenantId, selected, activeCandidates.Count);
-
-                return selected;
             }
-            finally
+
+            if (!salesRepIds.Any())
             {
-                tenantLock.Release();
+                _logger.LogWarning("No active members found in tenant {TenantId} for RoundRobin assignment. Using default user {DefaultUserId}.",
+                    tenantId, defaultUserId);
+                return defaultUserId;
             }
+
+            // Filter by active ApplicationUser accounts
+            var activeCandidates = await _db.Users
+                .AsNoTracking()
+                .Where(u => salesRepIds.Contains(u.Id) && u.IsActive)
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            if (!activeCandidates.Any())
+            {
+                return defaultUserId;
+            }
+
+            // Calculate active workload and recency of assignment from database
+            var candidateWorkloads = await _db.Leads
+                .IgnoreQueryFilters()
+                .Where(l => l.TenantId == tenantId && !l.IsArchived &&
+                            l.Status != LeadStatus.Converted && l.Status != LeadStatus.Lost &&
+                            l.OwnerUserId != null && activeCandidates.Contains(l.OwnerUserId))
+                .GroupBy(l => l.OwnerUserId!)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    ActiveCount = g.Count(),
+                    LastAssignedAt = g.Max(l => l.CreatedAt)
+                })
+                .ToListAsync();
+
+            var inFlightLoads = _inFlightTenantLoads.GetOrAdd(tenantId, _ => new ConcurrentDictionary<string, int>());
+            var inFlightTimes = _inFlightLastAssigned.GetOrAdd(tenantId, _ => new ConcurrentDictionary<string, DateTime>());
+
+            // Merge persistent database workload with in-flight uncommitted reservations
+            var candidateStats = activeCandidates.Select(userId =>
+            {
+                var work = candidateWorkloads.FirstOrDefault(w => w.UserId == userId);
+                var dbCount = work?.ActiveCount ?? 0;
+                var extraCount = inFlightLoads.TryGetValue(userId, out var extra) ? extra : 0;
+                var effectiveActiveCount = dbCount + extraCount;
+
+                var dbLastAssigned = work?.LastAssignedAt ?? DateTime.MinValue;
+                var memLastAssigned = inFlightTimes.TryGetValue(userId, out var dt) ? dt : DateTime.MinValue;
+                var effectiveLastAssigned = memLastAssigned > dbLastAssigned ? memLastAssigned : dbLastAssigned;
+
+                return new
+                {
+                    UserId = userId,
+                    ActiveCount = effectiveActiveCount,
+                    LastAssignedAt = effectiveLastAssigned
+                };
+            })
+            // Sort: Least loaded first, then least recently assigned, then stable UserId tie-breaker
+            .OrderBy(c => c.ActiveCount)
+            .ThenBy(c => c.LastAssignedAt)
+            .ThenBy(c => c.UserId)
+            .ToList();
+
+            var selected = candidateStats.First().UserId;
+
+            // Mark in-flight reservation immediately to prevent any concurrent assignment collisions
+            inFlightLoads.AddOrUpdate(selected, 1, (_, current) => current + 1);
+            inFlightTimes[selected] = DateTime.UtcNow;
+
+            await _auditService.LogAsync(
+                defaultUserId,
+                "Tenant",
+                tenantId.ToString(),
+                "LeadAssignedRoundRobin",
+                new
+                {
+                    AssignedUserId = selected,
+                    CandidateCount = activeCandidates.Count,
+                    SelectedEffectiveActiveCount = candidateStats.First().ActiveCount
+                });
+
+            _logger.LogInformation("Concurrency-safe RoundRobin assignment in tenant {TenantId}: assigned to {UserId} out of {Count} candidates.",
+                tenantId, selected, activeCandidates.Count);
+
+            return selected;
         }
 
         public void NotifyLeadPersisted(Guid tenantId, string assignedUserId)
@@ -193,6 +264,56 @@ namespace AI_Powered_CRM.Services.Implementations
             if (_inFlightTenantLoads.TryGetValue(tenantId, out var loads))
             {
                 loads.AddOrUpdate(assignedUserId, 0, (_, current) => Math.Max(0, current - 1));
+            }
+        }
+
+        private class TenantAssignmentLockScope : IAsyncDisposable
+        {
+            private readonly Guid _tenantId;
+            private readonly SemaphoreSlim _semaphore;
+            private readonly ApplicationDbContext? _db;
+            private readonly ILogger _logger;
+            private int _disposed;
+
+            public TenantAssignmentLockScope(
+                Guid tenantId,
+                SemaphoreSlim semaphore,
+                ApplicationDbContext? db,
+                ILogger logger)
+            {
+                _tenantId = tenantId;
+                _semaphore = semaphore;
+                _db = db;
+                _logger = logger;
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+                if (_db != null)
+                {
+                    try
+                    {
+                        var conn = _db.Database.GetDbConnection();
+                        if (conn.State == ConnectionState.Open)
+                        {
+                            using var cmd = conn.CreateCommand();
+                            cmd.CommandText = "EXEC sp_releaseapplock @Resource = @Resource, @LockOwner = 'Session';";
+                            var pResource = cmd.CreateParameter();
+                            pResource.ParameterName = "@Resource";
+                            pResource.Value = $"TalhaCRM_Assign_{_tenantId:N}";
+                            cmd.Parameters.Add(pResource);
+                            await cmd.ExecuteNonQueryAsync();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to release SQL Server applock for tenant {TenantId}.", _tenantId);
+                    }
+                }
+
+                _semaphore.Release();
             }
         }
     }

@@ -10,7 +10,13 @@ namespace AI_Powered_CRM.Services.Interfaces
         /// candidate availability, current load, and optional manual assignment overrides.
         /// Guaranteed concurrency-safe across simultaneous requests within each tenant.
         /// </summary>
-        Task<string> DetermineLeadOwnerAsync(Guid tenantId, string? requestedOwnerId, string defaultUserId);
+        Task<string> DetermineLeadOwnerAsync(Guid tenantId, string? requestedOwnerId, string defaultUserId, bool acquireLock = true);
+
+        /// <summary>
+        /// Acquires an atomic, distributed per-tenant lock coordinating lead assignment and persistence.
+        /// Backed by SQL Server sp_getapplock across multiple server instances with in-memory semaphore fallback.
+        /// </summary>
+        Task<IAsyncDisposable> AcquireTenantAssignmentLockAsync(Guid tenantId, TimeSpan? timeout = null);
 
         /// <summary>
         /// Notifies the assignment service that a determined lead has been committed to the database,

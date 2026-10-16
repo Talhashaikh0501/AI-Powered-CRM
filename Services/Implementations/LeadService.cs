@@ -168,37 +168,40 @@ namespace AI_Powered_CRM.Services.Implementations
 
         public async Task<Lead> CreateLeadAsync(CreateLeadDto dto, string currentUserId, string? role = null)
         {
-            string ownerUserId;
-            if (role == "Admin" || role == "Manager")
+            var tenantId = _tenantContext.CurrentTenantId;
+            await using (await _assignmentService.AcquireTenantAssignmentLockAsync(tenantId))
             {
-                ownerUserId = await _assignmentService.DetermineLeadOwnerAsync(_tenantContext.CurrentTenantId, dto.OwnerUserId, currentUserId);
-            }
-            else
-            {
-                // SalesExecutive or unknown role can ONLY create lead assigned to self
-                ownerUserId = currentUserId;
-            }
+                string ownerUserId;
+                if (role == "Admin" || role == "Manager")
+                {
+                    ownerUserId = await _assignmentService.DetermineLeadOwnerAsync(tenantId, dto.OwnerUserId, currentUserId, acquireLock: false);
+                }
+                else
+                {
+                    // SalesExecutive or unknown role can ONLY create lead assigned to self
+                    ownerUserId = currentUserId;
+                }
 
-            var lead = new Lead
-            {
-                Name = dto.Name.Trim(),
-                Phone = dto.Phone.Trim(),
-                Email = dto.Email?.Trim(),
-                Company = dto.Company?.Trim(),
-                Source = dto.Source,
-                InterestedProduct = dto.InterestedProduct.Trim(),
-                Budget = dto.Budget,
-                Status = dto.Status,
-                Priority = dto.Priority,
-                OwnerUserId = ownerUserId,
-                IsArchived = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+                var lead = new Lead
+                {
+                    Name = dto.Name.Trim(),
+                    Phone = dto.Phone.Trim(),
+                    Email = dto.Email?.Trim(),
+                    Company = dto.Company?.Trim(),
+                    Source = dto.Source,
+                    InterestedProduct = dto.InterestedProduct.Trim(),
+                    Budget = dto.Budget,
+                    Status = dto.Status,
+                    Priority = dto.Priority,
+                    OwnerUserId = ownerUserId,
+                    IsArchived = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
 
-            _context.Leads.Add(lead);
-            await _context.SaveChangesAsync();
-            _assignmentService?.NotifyLeadPersisted(lead.TenantId, ownerUserId);
+                _context.Leads.Add(lead);
+                await _context.SaveChangesAsync();
+                _assignmentService?.NotifyLeadPersisted(lead.TenantId, ownerUserId);
 
             // Initial status history
             _context.LeadStatusHistories.Add(new LeadStatusHistory
@@ -235,7 +238,8 @@ namespace AI_Powered_CRM.Services.Implementations
                 _logger.LogWarning(ex, "Initial AI analysis on lead creation deferred or failed for Lead {LeadId}", lead.LeadId);
             }
 
-            return lead;
+                return lead;
+            }
         }
 
         public async Task<bool> UpdateLeadAsync(UpdateLeadDto dto, string currentUserId, string role)

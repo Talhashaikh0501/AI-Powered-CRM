@@ -225,8 +225,8 @@ namespace AI_Powered_CRM.Controllers
                 var confirmationLink = Url.Action(nameof(ConfirmEmail), "Account", new { userId = user.Id, token }, Request.Scheme)
                                        ?? $"/Account/ConfirmEmail?userId={user.Id}&token={Uri.EscapeDataString(token)}";
 
-                await _emailDeliveryService.SendEmailConfirmationAsync(user.Email!, confirmationLink, user.FullName ?? user.Email ?? "Customer");
-                return RedirectToAction(nameof(RegisterConfirmation), new { email = model.ContactEmail });
+                var sent = await _emailDeliveryService.SendEmailConfirmationAsync(user.Email!, confirmationLink, user.FullName ?? user.Email ?? "Customer");
+                return RedirectToAction(nameof(RegisterConfirmation), new { email = model.ContactEmail, emailSent = sent });
             }
 
             TempData["SuccessMessage"] = "Your company workspace was registered successfully. Please check your email for confirmation instructions.";
@@ -238,9 +238,10 @@ namespace AI_Powered_CRM.Controllers
         // -------------------------------------------------------
         [HttpGet]
         [AllowAnonymous]
-        public IActionResult RegisterConfirmation(string? email)
+        public IActionResult RegisterConfirmation(string? email, bool emailSent = true)
         {
             ViewBag.Email = email ?? string.Empty;
+            ViewBag.EmailSent = emailSent;
             return View();
         }
 

@@ -1,9 +1,13 @@
 using System;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Mail;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AI_Powered_CRM.Services.Interfaces;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace AI_Powered_CRM.Services.Implementations
@@ -11,16 +15,24 @@ namespace AI_Powered_CRM.Services.Implementations
     public class EmailDeliveryService : IEmailDeliveryService
     {
         private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _environment;
         private readonly ILogger<EmailDeliveryService> _logger;
 
-        // Thread-safe store for development & testing inspection
+        public record CapturedEmail(string ToEmail, string Subject, string HtmlBody, DateTime CapturedAt);
+
+        // In-memory capture store for development, manual inspection and automated testing
+        public static readonly ConcurrentBag<CapturedEmail> CapturedEmails = new();
         public static string? LastSentConfirmationLink { get; private set; }
         public static string? LastSentInvitationLink { get; private set; }
         public static string? LastRecipientEmail { get; private set; }
 
-        public EmailDeliveryService(IConfiguration configuration, ILogger<EmailDeliveryService> logger)
+        public EmailDeliveryService(
+            IConfiguration configuration,
+            IWebHostEnvironment environment,
+            ILogger<EmailDeliveryService> logger)
         {
             _configuration = configuration;
+            _environment = environment;
             _logger = logger;
         }
 
@@ -38,9 +50,11 @@ namespace AI_Powered_CRM.Services.Implementations
             var fromEmail = _configuration["Email:FromEmail"] ?? "no-reply@aipoweredcrm.com";
             var fromName = _configuration["Email:FromName"] ?? "AI-Powered CRM";
 
-            // If SMTP is properly configured with a host, attempt delivery
-            if (!string.IsNullOrWhiteSpace(host) && int.TryParse(portString, out var port))
+            bool smtpConfigured = !string.IsNullOrWhiteSpace(host) && int.TryParse(portString, out _);
+
+            if (smtpConfigured)
             {
+                int.TryParse(portString, out var port);
                 try
                 {
                     using var client = new SmtpClient(host, port)
@@ -69,16 +83,32 @@ namespace AI_Powered_CRM.Services.Implementations
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to deliver email to {Recipient} via SMTP server {Host}:{Port}. Falling back to log capture.", toEmail, host, port);
-                    // Continue to log capture fallback
+                    // Accurate status: SMTP delivery failed. Never falsely report true when SMTP fails.
+                    _logger.LogError(ex, "Failed to deliver email to {Recipient} via configured SMTP server {Host}:{Port}.", toEmail, host, port);
+                    return false;
                 }
             }
 
-            // Safe Development Fallback: Structured log emission
-            _logger.LogInformation("[DEV EMAIL DISPATCH] To: {Recipient} | Subject: {Subject} | Fallback: No active SMTP delivery provider configured. Body preview: {Preview}...",
-                toEmail, subject, htmlBody.Length > 200 ? htmlBody[..200] : htmlBody);
+            // SMTP is unconfigured.
+            if (_environment.IsDevelopment())
+            {
+                // Development-only email capture
+                CapturedEmails.Add(new CapturedEmail(toEmail, subject, htmlBody, DateTime.UtcNow));
 
-            return true;
+                // Sanitize body preview to ensure sensitive tokens are not emitted to log streams
+                var sanitizedPreview = Regex.Replace(htmlBody, @"token=[^&\s""'<]+", "token=[PROTECTED]");
+                if (sanitizedPreview.Length > 160) sanitizedPreview = sanitizedPreview[..160];
+
+                _logger.LogInformation("[DEV EMAIL CAPTURE] Captured email to {Recipient} | Subject: {Subject} | Preview: {Preview}...",
+                    toEmail, subject, sanitizedPreview);
+
+                return true;
+            }
+
+            // In production/staging, unconfigured SMTP is an error and must report false
+            _logger.LogError("Email delivery rejected: No active SMTP server is configured in {Environment} environment. Outbound email to {Recipient} was not delivered.",
+                _environment.EnvironmentName, toEmail);
+            return false;
         }
 
         public Task<bool> SendEmailConfirmationAsync(string toEmail, string confirmationLink, string recipientName)
