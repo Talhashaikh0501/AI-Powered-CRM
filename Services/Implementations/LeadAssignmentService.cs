@@ -50,13 +50,13 @@ namespace AI_Powered_CRM.Services.Implementations
             }
 
             var isSqlServer = _db.Database.IsSqlServer();
-            bool sqlLockAcquired = false;
 
             if (isSqlServer)
             {
+                System.Data.Common.DbConnection? conn = null;
                 try
                 {
-                    var conn = _db.Database.GetDbConnection();
+                    conn = _db.Database.GetDbConnection();
                     if (conn.State != ConnectionState.Open)
                     {
                         await conn.OpenAsync();
@@ -82,25 +82,36 @@ namespace AI_Powered_CRM.Services.Implementations
                     pTimeout.Value = (int)effectiveTimeout.TotalMilliseconds;
                     cmd.Parameters.Add(pTimeout);
 
-                    var result = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                    var scalar = await cmd.ExecuteScalarAsync();
+                    var result = Convert.ToInt32(scalar);
                     if (result < 0)
                     {
-                        localLock.Release();
-                        throw new TimeoutException($"Failed to acquire SQL Server distributed lock for tenant {tenantId}. sp_getapplock return code: {result}.");
+                        if (result == -1)
+                        {
+                            throw new TimeoutException($"Timed out acquiring SQL Server distributed lock for tenant {tenantId} (sp_getapplock return code: {result}).");
+                        }
+                        throw new InvalidOperationException($"Failed to acquire mandatory SQL Server distributed lock for tenant {tenantId} (sp_getapplock return code: {result}).");
                     }
 
-                    sqlLockAcquired = true;
+                    return new TenantAssignmentLockScope(
+                        tenantId,
+                        localLock,
+                        conn,
+                        _logger);
                 }
-                catch (Exception ex) when (ex is not TimeoutException)
+                catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to invoke SQL Server sp_getapplock for tenant {TenantId}. Operating with in-process lock fallback.", tenantId);
+                    // Fail closed immediately. Never fall back to in-process lock when SQL Server is the database provider.
+                    localLock.Release();
+                    _logger.LogError(ex, "Mandatory SQL Server distributed lock acquisition failed for tenant {TenantId}. Failing closed.", tenantId);
+                    throw;
                 }
             }
 
             return new TenantAssignmentLockScope(
                 tenantId,
                 localLock,
-                sqlLockAcquired ? _db : null,
+                null,
                 _logger);
         }
 
@@ -267,23 +278,33 @@ namespace AI_Powered_CRM.Services.Implementations
             }
         }
 
+        public void RollbackInFlightReservation(Guid tenantId, string assignedUserId)
+        {
+            if (string.IsNullOrWhiteSpace(assignedUserId) || tenantId == Guid.Empty) return;
+
+            if (_inFlightTenantLoads.TryGetValue(tenantId, out var loads))
+            {
+                loads.AddOrUpdate(assignedUserId, 0, (_, current) => Math.Max(0, current - 1));
+            }
+        }
+
         private class TenantAssignmentLockScope : IAsyncDisposable
         {
             private readonly Guid _tenantId;
             private readonly SemaphoreSlim _semaphore;
-            private readonly ApplicationDbContext? _db;
+            private readonly System.Data.Common.DbConnection? _connection;
             private readonly ILogger _logger;
             private int _disposed;
 
             public TenantAssignmentLockScope(
                 Guid tenantId,
                 SemaphoreSlim semaphore,
-                ApplicationDbContext? db,
+                System.Data.Common.DbConnection? connection,
                 ILogger logger)
             {
                 _tenantId = tenantId;
                 _semaphore = semaphore;
-                _db = db;
+                _connection = connection;
                 _logger = logger;
             }
 
@@ -291,29 +312,39 @@ namespace AI_Powered_CRM.Services.Implementations
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-                if (_db != null)
+                try
                 {
-                    try
+                    if (_connection != null && _connection.State == ConnectionState.Open)
                     {
-                        var conn = _db.Database.GetDbConnection();
-                        if (conn.State == ConnectionState.Open)
+                        try
                         {
-                            using var cmd = conn.CreateCommand();
-                            cmd.CommandText = "EXEC sp_releaseapplock @Resource = @Resource, @LockOwner = 'Session';";
+                            using var cmd = _connection.CreateCommand();
+                            cmd.CommandText = @"
+                                DECLARE @res int;
+                                EXEC @res = sp_releaseapplock @Resource = @Resource, @LockOwner = 'Session';
+                                SELECT @res;";
                             var pResource = cmd.CreateParameter();
                             pResource.ParameterName = "@Resource";
                             pResource.Value = $"TalhaCRM_Assign_{_tenantId:N}";
                             cmd.Parameters.Add(pResource);
-                            await cmd.ExecuteNonQueryAsync();
+                            var scalar = await cmd.ExecuteScalarAsync();
+                            var releaseResult = Convert.ToInt32(scalar);
+                            if (releaseResult < 0)
+                            {
+                                _logger.LogWarning("sp_releaseapplock returned non-zero code {Code} for tenant {TenantId}.", releaseResult, _tenantId);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Failed to release SQL Server applock for tenant {TenantId}.", _tenantId);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to release SQL Server applock for tenant {TenantId}.", _tenantId);
-                    }
                 }
-
-                _semaphore.Release();
+                finally
+                {
+                    // Always release the local semaphore on every execution path
+                    _semaphore.Release();
+                }
             }
         }
     }

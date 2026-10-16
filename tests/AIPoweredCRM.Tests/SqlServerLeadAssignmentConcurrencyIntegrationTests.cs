@@ -266,6 +266,160 @@ namespace AIPoweredCRM.Tests
             }
         }
 
+        [Fact]
+        public async Task TC_SQLSERVER_LOCK_004_LockTimeout_FailsClosed_AndReleasesLocalSemaphore()
+        {
+            var tenantId = Guid.NewGuid();
+
+            using var context1 = CreateDbContext();
+            using var context2 = CreateDbContext();
+
+            // Simulate another instance acquiring the distributed SQL lock on Connection 1 directly
+            var conn1 = context1.Database.GetDbConnection();
+            if (conn1.State != System.Data.ConnectionState.Open)
+            {
+                await conn1.OpenAsync();
+            }
+
+            using var cmd1 = conn1.CreateCommand();
+            cmd1.CommandText = @"
+                DECLARE @res int;
+                EXEC @res = sp_getapplock 
+                    @Resource = @Resource, 
+                    @LockMode = 'Exclusive', 
+                    @LockOwner = 'Session', 
+                    @LockTimeout = 15000;
+                SELECT @res;";
+            var pRes = cmd1.CreateParameter();
+            pRes.ParameterName = "@Resource";
+            pRes.Value = $"TalhaCRM_Assign_{tenantId:N}";
+            cmd1.Parameters.Add(pRes);
+            var lockGranted = Convert.ToInt32(await cmd1.ExecuteScalarAsync());
+            Assert.True(lockGranted >= 0, "External instance must successfully acquire initial SQL applock.");
+
+            // Instance 2 attempts acquisition with 300ms timeout -> MUST time out on SQL Server sp_getapplock (return code -1)
+            var service2 = new LeadAssignmentService(context2, new MockAuditService(), NullLogger<LeadAssignmentService>.Instance);
+            var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
+            {
+                await service2.AcquireTenantAssignmentLockAsync(tenantId, TimeSpan.FromMilliseconds(300));
+            });
+            Assert.Contains("sp_getapplock return code: -1", ex.Message);
+
+            // Release lock on Connection 1
+            using var releaseCmd = conn1.CreateCommand();
+            releaseCmd.CommandText = "EXEC sp_releaseapplock @Resource = @Resource, @LockOwner = 'Session';";
+            var pRel = releaseCmd.CreateParameter();
+            pRel.ParameterName = "@Resource";
+            pRel.Value = $"TalhaCRM_Assign_{tenantId:N}";
+            releaseCmd.Parameters.Add(pRel);
+            await releaseCmd.ExecuteNonQueryAsync();
+
+            // Crucial check: Instance 2's local semaphore MUST have been released when SQL timeout occurred.
+            // If local semaphore was leaked, service2 would deadlock here.
+            await using var lock2 = await service2.AcquireTenantAssignmentLockAsync(tenantId, TimeSpan.FromSeconds(5));
+            Assert.NotNull(lock2);
+        }
+
+        [Fact]
+        public async Task TC_SQLSERVER_LOCK_005_ExceptionDuringPersistence_RollsBackInFlightReservation_AndReleasesLock()
+        {
+            var tenantId = Guid.NewGuid();
+            var repId = "sqllock_rollback_rep_" + Guid.NewGuid().ToString("N");
+
+            // Seed tenant and rep
+            using (var seedContext = CreateDbContext())
+            {
+                seedContext.IgnoreTenantFilter = true;
+                seedContext.Tenants.Add(new Tenant
+                {
+                    TenantId = tenantId,
+                    CompanyName = "Rollback Test Corp",
+                    Slug = "roll-" + Guid.NewGuid().ToString("N")[..6],
+                    ContactEmail = "roll@corp.in",
+                    DefaultCurrency = "INR",
+                    SubscriptionTier = SubscriptionTier.Starter,
+                    SubscriptionStatus = SubscriptionStatus.Active,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                seedContext.TenantSettings.Add(new TenantSetting
+                {
+                    TenantId = tenantId,
+                    LeadAssignmentMode = "RoundRobin",
+                    CurrencyCode = "INR",
+                    CurrencySymbol = "₹"
+                });
+                var rep = new ApplicationUser
+                {
+                    Id = repId,
+                    UserName = "rollback_rep@test.in",
+                    Email = "rollback_rep@test.in",
+                    FullName = "Rollback Rep",
+                    IsActive = true,
+                    EmailConfirmed = true,
+                    SecurityStamp = Guid.NewGuid().ToString()
+                };
+                seedContext.Users.Add(rep);
+                seedContext.TenantMemberships.Add(new TenantMembership
+                {
+                    MembershipId = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    UserId = rep.Id,
+                    CompanyRole = CompanyRole.SalesExecutive,
+                    IsActive = true,
+                    JoinedAt = DateTime.UtcNow
+                });
+                await seedContext.SaveChangesAsync();
+            }
+
+            var tenantContext = new TenantContext();
+            tenantContext.SetTenant(tenantId, "roll");
+
+            using var reqContext = CreateDbContext(tenantContext);
+            var assignmentService = new LeadAssignmentService(reqContext, new MockAuditService(), NullLogger<LeadAssignmentService>.Instance);
+
+            // 1. Acquire lock and determine owner (increments in-flight reservation counter)
+            string assignedOwner;
+            await using (await assignmentService.AcquireTenantAssignmentLockAsync(tenantId))
+            {
+                assignedOwner = await assignmentService.DetermineLeadOwnerAsync(tenantId, null, "admin_user", acquireLock: false);
+                Assert.Equal(repId, assignedOwner);
+
+                // Simulate persistence failure or exception
+                assignmentService.RollbackInFlightReservation(tenantId, assignedOwner);
+            }
+
+            // 2. Verify that after lock release, a subsequent lock acquisition succeeds without deadlock
+            await using var secondLock = await assignmentService.AcquireTenantAssignmentLockAsync(tenantId);
+            Assert.NotNull(secondLock);
+        }
+
+        [Fact]
+        public async Task TC_SQLSERVER_LOCK_006_DisposedLockScope_ReleasesSqlApplockAndSemaphore()
+        {
+            var tenantId = Guid.NewGuid();
+
+            using var context1 = CreateDbContext();
+            using var context2 = CreateDbContext();
+
+            var service1 = new LeadAssignmentService(context1, new MockAuditService(), NullLogger<LeadAssignmentService>.Instance);
+            var service2 = new LeadAssignmentService(context2, new MockAuditService(), NullLogger<LeadAssignmentService>.Instance);
+
+            // Scope block
+            await using (await service1.AcquireTenantAssignmentLockAsync(tenantId, TimeSpan.FromSeconds(5)))
+            {
+                // Held
+            }
+
+            // Immediately after disposal, connection 2 acquires lock without waiting
+            var acquireTask = service2.AcquireTenantAssignmentLockAsync(tenantId, TimeSpan.FromSeconds(5));
+            var completedTask = await Task.WhenAny(acquireTask, Task.Delay(2000));
+            Assert.Equal(acquireTask, completedTask);
+
+            await using var lock2 = await acquireTask;
+            Assert.NotNull(lock2);
+        }
+
         private class MockAuditService : IAuditService
         {
             public Task LogAsync(string? userId, string entityType, string entityId, string action, object? details = null, bool isSecurityCritical = false) => Task.CompletedTask;

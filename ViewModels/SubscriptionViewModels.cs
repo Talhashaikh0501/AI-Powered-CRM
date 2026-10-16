@@ -11,8 +11,8 @@ namespace AI_Powered_CRM.ViewModels
         public string Tagline { get; set; } = string.Empty;
         public decimal MonthlyPriceInr { get; set; }
         public decimal YearlyPriceInr { get; set; }
-        public string MonthlyPriceDisplay => MonthlyPriceInr == 0 ? "₹0" : $"₹{MonthlyPriceInr:N0}";
-        public string YearlyPriceDisplay => YearlyPriceInr == 0 ? "₹0" : $"₹{YearlyPriceInr:N0}";
+        public string MonthlyPriceDisplay => MonthlyPriceInr == 0 ? "\u20B90" : $"\u20B9{MonthlyPriceInr:N0}";
+        public string YearlyPriceDisplay => YearlyPriceInr == 0 ? "\u20B90" : $"\u20B9{YearlyPriceInr:N0}";
         public int MaxUserSeats { get; set; }
         public int MaxLeadsQuota { get; set; }
         public int MonthlyAiRequestLimit { get; set; }
@@ -28,7 +28,7 @@ namespace AI_Powered_CRM.ViewModels
         public SubscriptionStatus CurrentStatus { get; set; } = SubscriptionStatus.Trialing;
         public List<SubscriptionPlanDto> Plans { get; set; } = new List<SubscriptionPlanDto>();
         public bool IsAnnualBilling { get; set; } = false;
-        public string CurrencySymbol { get; set; } = "₹";
+        public string CurrencySymbol { get; set; } = "\u20B9";
     }
 
     public class SubscriptionDashboardViewModel
@@ -57,7 +57,7 @@ namespace AI_Powered_CRM.ViewModels
         public int AiPercent => MonthlyAiRequestLimit > 0 ? Math.Min(100, (int)((double)CurrentMonthAiUsage / MonthlyAiRequestLimit * 100)) : 100;
 
         public string CurrencyCode { get; set; } = "INR";
-        public string CurrencySymbol { get; set; } = "₹";
+        public string CurrencySymbol { get; set; } = "\u20B9";
 
         public List<SubscriptionPlanDto> Plans { get; set; } = new List<SubscriptionPlanDto>();
     }

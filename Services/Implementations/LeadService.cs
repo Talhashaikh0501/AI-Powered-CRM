@@ -199,9 +199,18 @@ namespace AI_Powered_CRM.Services.Implementations
                     UpdatedAt = DateTime.UtcNow
                 };
 
-                _context.Leads.Add(lead);
-                await _context.SaveChangesAsync();
-                _assignmentService?.NotifyLeadPersisted(lead.TenantId, ownerUserId);
+                try
+                {
+                    _context.Leads.Add(lead);
+                    await _context.SaveChangesAsync();
+                    _assignmentService?.NotifyLeadPersisted(lead.TenantId, ownerUserId);
+                }
+                catch (Exception ex)
+                {
+                    _assignmentService?.RollbackInFlightReservation(tenantId, ownerUserId);
+                    _logger.LogError(ex, "Failed to persist lead '{LeadName}' in tenant {TenantId}. Rolled back in-flight workload reservation.", dto.Name, tenantId);
+                    throw;
+                }
 
             // Initial status history
             _context.LeadStatusHistories.Add(new LeadStatusHistory

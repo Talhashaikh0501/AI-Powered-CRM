@@ -283,12 +283,13 @@ The application is engineered to deploy seamlessly to standard free and cost-eff
    Security__SuperAdminBootstrap__Password=YourProductionSecretPassword!2026
    Security__SuperAdminBootstrap__FullName=Platform Operations Lead
    Groq__ApiKey=gsk_your_groq_api_key_here
-   EmailSettings__SmtpServer=smtp.sendgrid.net
-   EmailSettings__SmtpPort=587
-   EmailSettings__SenderEmail=no-reply@yourdomain.com
-   EmailSettings__SenderName=NexusCRM
-   EmailSettings__Username=apikey
-   EmailSettings__Password=your_sendgrid_api_key
+   Email__Smtp__Host=smtp.sendgrid.net
+   Email__Smtp__Port=587
+   Email__Smtp__Username=apikey
+   Email__Smtp__Password=your_smtp_password_or_sendgrid_key
+   Email__Smtp__EnableSsl=true
+   Email__FromEmail=no-reply@yourdomain.com
+   Email__FromName=NexusCRM AI
    ```
 
 ### Option B: Render / Railway (Docker Linux Container)

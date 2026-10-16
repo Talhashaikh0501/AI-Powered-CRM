@@ -14,7 +14,8 @@ namespace AI_Powered_CRM.Services.Interfaces
 
         /// <summary>
         /// Acquires an atomic, distributed per-tenant lock coordinating lead assignment and persistence.
-        /// Backed by SQL Server sp_getapplock across multiple server instances with in-memory semaphore fallback.
+        /// Mandatory distributed application lock backed by SQL Server sp_getapplock when running against SQL Server
+        /// (failing closed if unavailable), with in-memory semaphore serialization for intra-process concurrency.
         /// </summary>
         Task<IAsyncDisposable> AcquireTenantAssignmentLockAsync(Guid tenantId, TimeSpan? timeout = null);
 
@@ -23,5 +24,10 @@ namespace AI_Powered_CRM.Services.Interfaces
         /// reconciling temporary in-flight workload reservation counters.
         /// </summary>
         void NotifyLeadPersisted(Guid tenantId, string assignedUserId);
+
+        /// <summary>
+        /// Rolls back temporary in-flight workload reservations if lead creation or persistence throws an exception.
+        /// </summary>
+        void RollbackInFlightReservation(Guid tenantId, string assignedUserId);
     }
 }

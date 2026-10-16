@@ -258,6 +258,78 @@ namespace AIPoweredCRM.Tests
             Assert.Contains("Welcome", captured.HtmlBody);
         }
 
+        [Fact]
+        public async Task TC_EMAIL_RELIABILITY_004_ProductionLogging_NeverLeaksConfirmationTokensOrLinks()
+        {
+            var inMemorySettings = new Dictionary<string, string?>
+            {
+                ["Email:Smtp:Host"] = "", // unconfigured in production
+                ["Email:Smtp:Port"] = ""
+            };
+            var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
+            var mockEnv = new TestWebHostEnvironment { EnvironmentName = Environments.Production };
+
+            var testLogger = new TestEmailLogger();
+            var service = new EmailDeliveryService(config, mockEnv, testLogger);
+
+            var rawSecretToken = "CfDJ8SecretToken_xyz_123456789_DoNotLeak";
+            var sensitiveLink = $"https://crm.local/Account/ConfirmEmail?userId=user123&token={rawSecretToken}";
+
+            var result = await service.SendEmailConfirmationAsync("user@production.in", sensitiveLink, "Production User");
+
+            // Must fail closed in production
+            Assert.False(result);
+
+            // Verify logged messages never contain raw secret token or link
+            foreach (var log in testLogger.LoggedMessages)
+            {
+                Assert.DoesNotContain(rawSecretToken, log);
+                Assert.DoesNotContain(sensitiveLink, log);
+            }
+        }
+
+        [Fact]
+        public void TC_EMAIL_RELIABILITY_005_EnvironmentVariable_ConfigurationKeys_ParsedCorrectly()
+        {
+            // Verify canonical ASP.NET Core environment variable format (double underscore)
+            var envVars = new Dictionary<string, string?>
+            {
+                ["Email:Smtp:Host"] = "smtp.sendgrid.net",
+                ["Email:Smtp:Port"] = "587",
+                ["Email:Smtp:Username"] = "apikey",
+                ["Email:Smtp:Password"] = "SG.test-api-key-12345",
+                ["Email:Smtp:EnableSsl"] = "true",
+                ["Email:FromEmail"] = "alerts@crm-saas.com",
+                ["Email:FromName"] = "CRM Operations"
+            };
+            var config = new ConfigurationBuilder().AddInMemoryCollection(envVars).Build();
+
+            Assert.Equal("smtp.sendgrid.net", config["Email:Smtp:Host"]);
+            Assert.Equal("587", config["Email:Smtp:Port"]);
+            Assert.Equal("apikey", config["Email:Smtp:Username"]);
+            Assert.Equal("SG.test-api-key-12345", config["Email:Smtp:Password"]);
+            Assert.Equal("alerts@crm-saas.com", config["Email:FromEmail"]);
+            Assert.Equal("CRM Operations", config["Email:FromName"]);
+        }
+
+        private class TestEmailLogger : Microsoft.Extensions.Logging.ILogger<EmailDeliveryService>
+        {
+            public List<string> LoggedMessages { get; } = new();
+
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                Microsoft.Extensions.Logging.LogLevel logLevel,
+                Microsoft.Extensions.Logging.EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                LoggedMessages.Add(formatter(state, exception));
+            }
+        }
+
         private class TestWebHostEnvironment : IWebHostEnvironment
         {
             public string WebRootPath { get; set; } = string.Empty;

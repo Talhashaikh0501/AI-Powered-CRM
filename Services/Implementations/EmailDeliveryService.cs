@@ -43,12 +43,12 @@ namespace AI_Powered_CRM.Services.Implementations
 
             LastRecipientEmail = toEmail;
 
-            var host = _configuration["Email:Smtp:Host"];
-            var portString = _configuration["Email:Smtp:Port"];
-            var username = _configuration["Email:Smtp:Username"];
-            var password = _configuration["Email:Smtp:Password"];
-            var fromEmail = _configuration["Email:FromEmail"] ?? "no-reply@aipoweredcrm.com";
-            var fromName = _configuration["Email:FromName"] ?? "AI-Powered CRM";
+            var host = _configuration["Email:Smtp:Host"] ?? _configuration["EmailSettings:SmtpServer"];
+            var portString = _configuration["Email:Smtp:Port"] ?? _configuration["EmailSettings:SmtpPort"];
+            var username = _configuration["Email:Smtp:Username"] ?? _configuration["EmailSettings:Username"];
+            var password = _configuration["Email:Smtp:Password"] ?? _configuration["EmailSettings:Password"];
+            var fromEmail = _configuration["Email:FromEmail"] ?? _configuration["EmailSettings:SenderEmail"] ?? "no-reply@aipoweredcrm.com";
+            var fromName = _configuration["Email:FromName"] ?? _configuration["EmailSettings:SenderName"] ?? "AI-Powered CRM";
 
             bool smtpConfigured = !string.IsNullOrWhiteSpace(host) && int.TryParse(portString, out _);
 
@@ -57,9 +57,13 @@ namespace AI_Powered_CRM.Services.Implementations
                 int.TryParse(portString, out var port);
                 try
                 {
+                    var enableSsl = _configuration.GetValue<bool?>("Email:Smtp:EnableSsl") 
+                                    ?? _configuration.GetValue<bool?>("EmailSettings:EnableSsl") 
+                                    ?? true;
+
                     using var client = new SmtpClient(host, port)
                     {
-                        EnableSsl = _configuration.GetValue<bool>("Email:Smtp:EnableSsl", true),
+                        EnableSsl = enableSsl,
                         Timeout = 10000
                     };
 
@@ -95,8 +99,8 @@ namespace AI_Powered_CRM.Services.Implementations
                 // Development-only email capture
                 CapturedEmails.Add(new CapturedEmail(toEmail, subject, htmlBody, DateTime.UtcNow));
 
-                // Sanitize body preview to ensure sensitive tokens are not emitted to log streams
-                var sanitizedPreview = Regex.Replace(htmlBody, @"token=[^&\s""'<]+", "token=[PROTECTED]");
+                // Sanitize body preview to ensure sensitive tokens and credentials are not emitted to log streams
+                var sanitizedPreview = Regex.Replace(htmlBody, @"(?i)(token|code|key|password|sig)=[^&\s""'<]+", "$1=[PROTECTED]");
                 if (sanitizedPreview.Length > 160) sanitizedPreview = sanitizedPreview[..160];
 
                 _logger.LogInformation("[DEV EMAIL CAPTURE] Captured email to {Recipient} | Subject: {Subject} | Preview: {Preview}...",

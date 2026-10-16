@@ -250,7 +250,11 @@ builder.Services.AddScoped<IReportService, ReportService>();
 // ------------------------------------------------------
 // MVC & SWAGGER
 // ------------------------------------------------------
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
