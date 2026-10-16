@@ -10,7 +10,7 @@
             <span class="badge bg-danger">Platform Operations</span>
         </div>
         <p class="text-muted small mb-0">
-            Cross-tenant aggregate telemetry, subscription distribution, and platform health. Tenant privacy is strictly preserved.
+            Cross-tenant aggregate telemetry, subscription distribution, and platform health. Customer data privacy is strictly preserved.
         </p>
     </div>
     <div class="d-flex align-items-center gap-2">
@@ -38,47 +38,69 @@
 
 <!-- SaaS Metrics Overview -->
 <div class="row g-3 mb-4">
-    <div class="col-lg-3 col-sm-6">
+    <div class="col-xl-3 col-sm-6">
         <div class="crm-card p-3 h-100">
-            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Companies</div>
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Workspaces</div>
             <div class="fs-2 fw-bold text-dark">@Model.TotalTenantsCount</div>
             <div class="small text-success"><i class="bi bi-check-circle-fill me-1"></i>@Model.ActiveTenantsCount Active Tenants</div>
         </div>
     </div>
-    <div class="col-lg-3 col-sm-6">
+    <div class="col-xl-3 col-sm-6">
         <div class="crm-card p-3 h-100">
-            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Active Platform Users</div>
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Total Platform Users</div>
             <div class="fs-2 fw-bold text-primary">@Model.TotalPlatformUsersCount</div>
-            <div class="small text-muted">Across all customer organizations</div>
+            <div class="small text-muted">Across all organizations</div>
         </div>
     </div>
-    <div class="col-lg-3 col-sm-6">
+    <div class="col-xl-3 col-sm-6">
+        <div class="crm-card p-3 h-100">
+            <div class="small fw-semibold text-muted text-uppercase mb-1">Estimated MRR (INR)</div>
+            <div class="fs-2 fw-bold text-success">₹@Model.EstimatedMonthlyMrrInr.ToString("N0")</div>
+            <div class="small text-muted">From active subscribed plans</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-sm-6">
         <div class="crm-card p-3 h-100">
             <div class="small fw-semibold text-muted text-uppercase mb-1">Platform AI Calls (Month)</div>
             <div class="fs-2 fw-bold text-info">@Model.TotalAiCallsThisMonth.ToString("N0")</div>
             <div class="small text-muted">Total Groq AI inferences processed</div>
         </div>
     </div>
-    <div class="col-lg-3 col-sm-6">
-        <div class="crm-card p-3 h-100">
-            <div class="small fw-semibold text-muted text-uppercase mb-1">Subscription Tiers</div>
-            <div class="d-flex flex-wrap gap-1 mt-2">
-                @foreach (var tier in Model.TierDistribution)
-                {
-                    <span class="badge bg-light text-dark border small">
-                        @tier.Key: <strong>@tier.Value</strong>
-                    </span>
-                }
+</div>
+
+<!-- Search & Filtering Toolbar -->
+<div class="crm-card p-3 mb-4">
+    <form method="get" asp-action="Index" class="row g-2 align-items-center">
+        <div class="col-md-5">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                <input type="text" name="search" value="@Model.Search" class="form-control bg-light border-start-0" placeholder="Search by company name, slug, or email..." />
             </div>
         </div>
-    </div>
+        <div class="col-md-3">
+            <select name="tier" class="form-select form-select-sm" asp-for="FilterTier" asp-items="Html.GetEnumSelectList<AI_Powered_CRM.Models.Enums.SubscriptionTier>()">
+                <option value="">-- All Subscription Tiers --</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="activeOnly" class="form-select form-select-sm">
+                <option value="">-- All Statuses --</option>
+                <option value="true" selected="@(Model.FilterActive == true)">Active Only</option>
+                <option value="false" selected="@(Model.FilterActive == false)">Disabled Only</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-primary w-100 fw-semibold">Filter</button>
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Reset</a>
+        </div>
+    </form>
 </div>
 
 <!-- Tenant Organizations Directory -->
 <div class="crm-card p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h5 class="fw-bold text-dark mb-0">Tenant Organizations Directory</h5>
+            <h5 class="fw-bold text-dark mb-0">Customer Workspace Directory (@Model.Tenants.Count)</h5>
             <small class="text-muted">High-level account health, seat consumption, and AI quota utilization</small>
         </div>
     </div>
@@ -90,18 +112,27 @@
                     <th class="ps-3">Company / Slug</th>
                     <th>Billing Contact</th>
                     <th>Tier & Status</th>
-                    <th>Active Seats</th>
-                    <th>AI Usage (Month)</th>
+                    <th>Seats Used</th>
+                    <th>AI Quota (Month)</th>
                     <th>Registered</th>
-                    <th class="text-end pe-3">Support Action</th>
+                    <th class="text-end pe-3">Actions</th>
                 </tr>
             </thead>
             <tbody>
+                @if (Model.Tenants.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-building-slash fs-3 d-block mb-2"></i>
+                            No workspaces match the current search filter.
+                        </td>
+                    </tr>
+                }
                 @foreach (var t in Model.Tenants)
                 {
                     <tr>
                         <td class="ps-3">
-                            <span class="fw-bold text-dark d-block">@t.CompanyName</span>
+                            <a asp-action="TenantDetails" asp-route-id="@t.TenantId" class="fw-bold text-dark text-decoration-none d-block">@t.CompanyName</a>
                             <small class="font-monospace text-muted">/t/@t.Slug</small>
                         </td>
                         <td>
@@ -109,19 +140,40 @@
                         </td>
                         <td>
                             <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle me-1">@t.Tier</span>
-                            <span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Disabled")</span>
+                            <span class="badge @(t.IsActive ? "bg-success" : "bg-danger")">@(t.IsActive ? "Active" : "Disabled")</span>
                         </td>
                         <td>
                             <span class="fw-semibold">@t.ActiveSeats / @t.MaxUserSeats</span>
+                            <div class="progress mt-1" style="height: 4px; max-width: 100px;">
+                                <div class="progress-bar @(t.ActiveSeats >= t.MaxUserSeats ? "bg-danger" : "bg-primary")"
+                                     style="width: @(t.MaxUserSeats > 0 ? Math.Min(100, (t.ActiveSeats * 100) / t.MaxUserSeats) : 0)%;"></div>
+                            </div>
                         </td>
                         <td>
                             <span class="small">@t.CurrentMonthAiUsageCount / @t.MonthlyAiRequestLimit</span>
+                            <div class="progress mt-1" style="height: 4px; max-width: 100px;">
+                                <div class="progress-bar @(t.MonthlyAiRequestLimit > 0 && t.CurrentMonthAiUsageCount >= t.MonthlyAiRequestLimit ? "bg-danger" : "bg-info")"
+                                     style="width: @(t.MonthlyAiRequestLimit > 0 ? Math.Min(100, (t.CurrentMonthAiUsageCount * 100) / t.MonthlyAiRequestLimit) : 0)%;"></div>
+                            </div>
                         </td>
                         <td class="text-muted small">@t.CreatedAt.ToString("MMM dd, yyyy")</td>
                         <td class="text-end pe-3">
-                            <a asp-action="Support" asp-route-targetTenantId="@t.TenantId" class="btn btn-sm btn-outline-primary py-1 px-2" style="font-size: 0.75rem;">
-                                <i class="bi bi-shield-plus me-1"></i> Request Support Access
-                            </a>
+                            <div class="btn-group btn-group-sm">
+                                <a asp-action="TenantDetails" asp-route-id="@t.TenantId" class="btn btn-outline-secondary py-1 px-2" title="Inspect Workspace Details">
+                                    <i class="bi bi-eye"></i> Details
+                                </a>
+                                <form asp-action="ToggleTenantStatus" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to @(t.IsActive ? "deactivate" : "activate") @t.CompanyName?');">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="TenantId" value="@t.TenantId" />
+                                    <input type="hidden" name="Reason" value="Toggled from Platform SuperAdmin dashboard" />
+                                    <button type="submit" class="btn @(t.IsActive ? "btn-outline-danger" : "btn-outline-success") py-1 px-2" title="@(t.IsActive ? "Deactivate Workspace" : "Activate Workspace")">
+                                        <i class="bi @(t.IsActive ? "bi-pause-circle" : "bi-play-circle")"></i>
+                                    </button>
+                                </form>
+                                <a asp-action="Support" asp-route-targetTenantId="@t.TenantId" class="btn btn-outline-primary py-1 px-2" title="Request Delegated Support Access">
+                                    <i class="bi bi-shield-plus"></i> Support
+                                </a>
+                            </div>
                         </td>
                     </tr>
                 }

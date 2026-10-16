@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models.Entities;
@@ -16,6 +18,13 @@ namespace AI_Powered_CRM.Services.Implementations
         private readonly ApplicationDbContext _db;
         private readonly IAuditService _auditService;
         private readonly ILogger<LeadAssignmentService> _logger;
+
+        // Per-tenant concurrency locks ensuring synchronized, deadlock-free queueing
+        private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> _tenantLocks = new();
+
+        // In-flight workload reservations tracking uncommitted concurrent assignments per tenant
+        private static readonly ConcurrentDictionary<Guid, ConcurrentDictionary<string, int>> _inFlightTenantLoads = new();
+        private static readonly ConcurrentDictionary<Guid, ConcurrentDictionary<string, DateTime>> _inFlightLastAssigned = new();
 
         public LeadAssignmentService(
             ApplicationDbContext db,
@@ -63,92 +72,128 @@ namespace AI_Powered_CRM.Services.Implementations
                 return defaultUserId;
             }
 
-            // 3. Round-Robin Distribution among active Sales Representatives
-            // First look for active SalesExecutives
-            var salesRepIds = await _db.TenantMemberships
-                .IgnoreQueryFilters()
-                .Where(m => m.TenantId == tenantId && m.IsActive && m.CompanyRole == CompanyRole.SalesExecutive)
-                .Select(m => m.UserId)
-                .ToListAsync();
+            // 3. Acquire tenant-specific synchronization lock to ensure strictly concurrency-safe rotation
+            var tenantLock = _tenantLocks.GetOrAdd(tenantId, _ => new SemaphoreSlim(1, 1));
+            await tenantLock.WaitAsync();
 
-            // Fallback: If no dedicated SalesExecutives found, expand to all active tenant members
-            if (!salesRepIds.Any())
+            try
             {
-                salesRepIds = await _db.TenantMemberships
+                // 4. Round-Robin Distribution among active Sales Representatives
+                var salesRepIds = await _db.TenantMemberships
                     .IgnoreQueryFilters()
-                    .Where(m => m.TenantId == tenantId && m.IsActive)
+                    .Where(m => m.TenantId == tenantId && m.IsActive && m.CompanyRole == CompanyRole.SalesExecutive)
                     .Select(m => m.UserId)
                     .ToListAsync();
-            }
 
-            if (!salesRepIds.Any())
-            {
-                _logger.LogWarning("No active members found in tenant {TenantId} for RoundRobin assignment. Using default user {DefaultUserId}.",
-                    tenantId, defaultUserId);
-                return defaultUserId;
-            }
-
-            // Filter by active ApplicationUser accounts
-            var activeCandidates = await _db.Users
-                .AsNoTracking()
-                .Where(u => salesRepIds.Contains(u.Id) && u.IsActive)
-                .Select(u => u.Id)
-                .ToListAsync();
-
-            if (!activeCandidates.Any())
-            {
-                return defaultUserId;
-            }
-
-            // 4. Calculate active workload and recency of assignment for each candidate in this tenant
-            var candidateWorkloads = await _db.Leads
-                .IgnoreQueryFilters()
-                .Where(l => l.TenantId == tenantId && !l.IsArchived &&
-                            l.Status != LeadStatus.Converted && l.Status != LeadStatus.Lost &&
-                            l.OwnerUserId != null && activeCandidates.Contains(l.OwnerUserId))
-                .GroupBy(l => l.OwnerUserId!)
-                .Select(g => new
+                // Fallback: If no dedicated SalesExecutives found, expand to all active tenant members
+                if (!salesRepIds.Any())
                 {
-                    UserId = g.Key,
-                    ActiveCount = g.Count(),
-                    LastAssignedAt = g.Max(l => l.CreatedAt)
+                    salesRepIds = await _db.TenantMemberships
+                        .IgnoreQueryFilters()
+                        .Where(m => m.TenantId == tenantId && m.IsActive)
+                        .Select(m => m.UserId)
+                        .ToListAsync();
+                }
+
+                if (!salesRepIds.Any())
+                {
+                    _logger.LogWarning("No active members found in tenant {TenantId} for RoundRobin assignment. Using default user {DefaultUserId}.",
+                        tenantId, defaultUserId);
+                    return defaultUserId;
+                }
+
+                // Filter by active ApplicationUser accounts
+                var activeCandidates = await _db.Users
+                    .AsNoTracking()
+                    .Where(u => salesRepIds.Contains(u.Id) && u.IsActive)
+                    .Select(u => u.Id)
+                    .ToListAsync();
+
+                if (!activeCandidates.Any())
+                {
+                    return defaultUserId;
+                }
+
+                // 5. Calculate active workload and recency of assignment from database
+                var candidateWorkloads = await _db.Leads
+                    .IgnoreQueryFilters()
+                    .Where(l => l.TenantId == tenantId && !l.IsArchived &&
+                                l.Status != LeadStatus.Converted && l.Status != LeadStatus.Lost &&
+                                l.OwnerUserId != null && activeCandidates.Contains(l.OwnerUserId))
+                    .GroupBy(l => l.OwnerUserId!)
+                    .Select(g => new
+                    {
+                        UserId = g.Key,
+                        ActiveCount = g.Count(),
+                        LastAssignedAt = g.Max(l => l.CreatedAt)
+                    })
+                    .ToListAsync();
+
+                var inFlightLoads = _inFlightTenantLoads.GetOrAdd(tenantId, _ => new ConcurrentDictionary<string, int>());
+                var inFlightTimes = _inFlightLastAssigned.GetOrAdd(tenantId, _ => new ConcurrentDictionary<string, DateTime>());
+
+                // Merge persistent database workload with in-flight uncommitted reservations
+                var candidateStats = activeCandidates.Select(userId =>
+                {
+                    var work = candidateWorkloads.FirstOrDefault(w => w.UserId == userId);
+                    var dbCount = work?.ActiveCount ?? 0;
+                    var extraCount = inFlightLoads.TryGetValue(userId, out var extra) ? extra : 0;
+                    var effectiveActiveCount = dbCount + extraCount;
+
+                    var dbLastAssigned = work?.LastAssignedAt ?? DateTime.MinValue;
+                    var memLastAssigned = inFlightTimes.TryGetValue(userId, out var dt) ? dt : DateTime.MinValue;
+                    var effectiveLastAssigned = memLastAssigned > dbLastAssigned ? memLastAssigned : dbLastAssigned;
+
+                    return new
+                    {
+                        UserId = userId,
+                        ActiveCount = effectiveActiveCount,
+                        LastAssignedAt = effectiveLastAssigned
+                    };
                 })
-                .ToListAsync();
+                // Sort: Least loaded first, then least recently assigned, then stable UserId tie-breaker
+                .OrderBy(c => c.ActiveCount)
+                .ThenBy(c => c.LastAssignedAt)
+                .ThenBy(c => c.UserId)
+                .ToList();
 
-            var candidateStats = activeCandidates.Select(userId =>
+                var selected = candidateStats.First().UserId;
+
+                // Mark in-flight reservation immediately to prevent any concurrent assignment collisions
+                inFlightLoads.AddOrUpdate(selected, 1, (_, current) => current + 1);
+                inFlightTimes[selected] = DateTime.UtcNow;
+
+                await _auditService.LogAsync(
+                    defaultUserId,
+                    "Tenant",
+                    tenantId.ToString(),
+                    "LeadAssignedRoundRobin",
+                    new
+                    {
+                        AssignedUserId = selected,
+                        CandidateCount = activeCandidates.Count,
+                        SelectedEffectiveActiveCount = candidateStats.First().ActiveCount
+                    });
+
+                _logger.LogInformation("Concurrency-safe RoundRobin assignment in tenant {TenantId}: assigned to {UserId} out of {Count} candidates.",
+                    tenantId, selected, activeCandidates.Count);
+
+                return selected;
+            }
+            finally
             {
-                var work = candidateWorkloads.FirstOrDefault(w => w.UserId == userId);
-                return new
-                {
-                    UserId = userId,
-                    ActiveCount = work?.ActiveCount ?? 0,
-                    LastAssignedAt = work?.LastAssignedAt ?? DateTime.MinValue
-                };
-            })
-            // Least loaded first, then least recently assigned
-            .OrderBy(c => c.ActiveCount)
-            .ThenBy(c => c.LastAssignedAt)
-            .ThenBy(c => c.UserId)
-            .ToList();
+                tenantLock.Release();
+            }
+        }
 
-            var selected = candidateStats.First().UserId;
+        public void NotifyLeadPersisted(Guid tenantId, string assignedUserId)
+        {
+            if (string.IsNullOrWhiteSpace(assignedUserId) || tenantId == Guid.Empty) return;
 
-            await _auditService.LogAsync(
-                defaultUserId,
-                "Tenant",
-                tenantId.ToString(),
-                "LeadAssignedRoundRobin",
-                new
-                {
-                    AssignedUserId = selected,
-                    CandidateCount = activeCandidates.Count,
-                    SelectedActiveLeadCount = candidateStats.First().ActiveCount
-                });
-
-            _logger.LogInformation("RoundRobin lead assignment in tenant {TenantId}: assigned to {UserId} out of {Count} candidates.",
-                tenantId, selected, activeCandidates.Count);
-
-            return selected;
+            if (_inFlightTenantLoads.TryGetValue(tenantId, out var loads))
+            {
+                loads.AddOrUpdate(assignedUserId, 0, (_, current) => Math.Max(0, current - 1));
+            }
         }
     }
 }

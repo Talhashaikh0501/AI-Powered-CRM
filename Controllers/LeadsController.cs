@@ -61,24 +61,31 @@ namespace AI_Powered_CRM.Controllers
             LeadStatus?   status,
             LeadPriority? priority,
             string?       source,
+            string?       sortBy,
+            string?       sortOrder,
             int           page = 1)
         {
             var userId = GetUserId();
             var role   = GetUserRole();
 
             var (leads, totalCount) = await _leadService.GetPagedLeadsAsync(
-                search, status, priority, source, userId, role, page, 15);
+                search, status, priority, source, userId, role, page, 15, sortBy, sortOrder);
+
+            var availableUsers = await _userManager.Users.Where(u => u.IsActive).ToListAsync();
 
             var vm = new LeadIndexViewModel
             {
-                Leads       = leads,
-                TotalCount  = totalCount,
-                CurrentPage = page,
-                PageSize    = 15,
-                Search      = search,
-                Status      = status,
-                Priority    = priority,
-                Source      = source
+                Leads          = leads,
+                TotalCount     = totalCount,
+                CurrentPage    = page,
+                PageSize       = 15,
+                Search         = search,
+                Status         = status,
+                Priority       = priority,
+                Source         = source,
+                SortBy         = sortBy,
+                SortOrder      = sortOrder,
+                AvailableUsers = availableUsers
             };
 
             return View(vm);
@@ -324,6 +331,32 @@ namespace AI_Powered_CRM.Controllers
             if (!success) return Forbid();
 
             TempData["SuccessMessage"] = "Lead has been archived.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // -----------------------------------------------------------------------
+        // POST: /Leads/BulkAction   (Admin & Manager only)
+        // -----------------------------------------------------------------------
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<IActionResult> BulkAction(BulkLeadActionViewModel model)
+        {
+            if (model.SelectedLeadIds == null || !model.SelectedLeadIds.Any())
+            {
+                TempData["ErrorMessage"] = "No leads were selected for bulk action.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var count = await _leadService.ExecuteBulkActionAsync(
+                model.SelectedLeadIds,
+                model.Action,
+                model.TargetOwnerUserId,
+                model.TargetStatus,
+                GetUserId(),
+                GetUserRole());
+
+            TempData["SuccessMessage"] = $"Bulk {model.Action} executed successfully on {count} lead(s).";
             return RedirectToAction(nameof(Index));
         }
 

@@ -16,8 +16,10 @@ namespace AI_Powered_CRM.Services.Interfaces
             string?       source,
             string?       currentUserId,
             string?       role,
-            int           page     = 1,
-            int           pageSize = 15);
+            int           page      = 1,
+            int           pageSize  = 15,
+            string?       sortBy    = null,
+            string?       sortOrder = null);
 
         Task<Lead?>         GetLeadDetailsAsync(int id, string? currentUserId, string? role);
         Task<Lead>          CreateLeadAsync(CreateLeadDto dto, string currentUserId, string? role = null);
@@ -25,6 +27,7 @@ namespace AI_Powered_CRM.Services.Interfaces
         Task<bool>          ChangeStatusAsync(int leadId, LeadStatus newStatus, string? notes, string currentUserId, string role);
         Task<bool>          AssignLeadAsync(int leadId, string newOwnerId, string assignedByUserId, string role);
         Task<bool>          ArchiveLeadAsync(int leadId, string currentUserId, string role);
+        Task<int>           ExecuteBulkActionAsync(List<int> leadIds, string action, string? targetOwnerUserId, LeadStatus? targetStatus, string currentUserId, string role);
         Task<AILeadInsight?> RunAIAnalysisAsync(int leadId, string currentUserId, string role);
         Task<Dictionary<LeadStatus, List<Lead>>> GetPipelineKanbanAsync(string? currentUserId, string? role);
     }

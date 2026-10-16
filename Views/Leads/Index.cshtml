@@ -1,13 +1,14 @@
 @model AI_Powered_CRM.ViewModels.LeadIndexViewModel
 @{
     ViewData["Title"] = "Leads Workspace";
+    var isManagerOrAdmin = User.IsInRole("Admin") || User.IsInRole("Manager");
 }
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
     <div>
         <h3 class="fw-bold text-dark mb-1">Leads Intelligence Workspace</h3>
         <p class="text-muted small mb-0">
-            View, search, and prioritize leads with AI-driven scoring and qualification insights.
+            View, search, sort, and prioritize leads with AI-driven scoring, qualification insights, and batch management.
         </p>
     </div>
     <div class="d-flex align-items-center gap-2">
@@ -17,9 +18,28 @@
     </div>
 </div>
 
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show small" role="alert">
+        <i class="bi bi-check-circle-fill me-1"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
 <!-- Search & Filter Bar -->
 <div class="crm-card p-3 mb-4">
     <form method="get" asp-action="Index" class="row g-2 align-items-center">
+        <input type="hidden" name="sortBy" value="@Model.SortBy" />
+        <input type="hidden" name="sortOrder" value="@Model.SortOrder" />
+
         <div class="col-lg-4 col-md-6">
             <div class="input-group input-group-sm">
                 <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
@@ -61,7 +81,7 @@
 
         <div class="col-lg-2 col-md-6 col-sm-6 d-flex gap-2">
             <button type="submit" class="btn btn-sm btn-dark w-100">Filter</button>
-            @if (!string.IsNullOrEmpty(Model.Search) || Model.Status.HasValue || Model.Priority.HasValue || !string.IsNullOrEmpty(Model.Source))
+            @if (!string.IsNullOrEmpty(Model.Search) || Model.Status.HasValue || Model.Priority.HasValue || !string.IsNullOrEmpty(Model.Source) || !string.IsNullOrEmpty(Model.SortBy))
             {
                 <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Reset Filters"><i class="bi bi-x-lg"></i></a>
             }
@@ -69,17 +89,100 @@
     </form>
 </div>
 
+@if (isManagerOrAdmin)
+{
+    <!-- Bulk Actions Panel (Visible when leads are selected) -->
+    <div id="bulkActionPanel" class="crm-card p-3 mb-3 bg-light border-primary d-none">
+        <form asp-action="BulkAction" method="post" id="bulkActionForm" class="row g-2 align-items-center">
+            @Html.AntiForgeryToken()
+            <div id="selectedLeadIdsContainer"></div>
+
+            <div class="col-auto">
+                <span class="badge bg-primary fs-6" id="selectedCountBadge">0 selected</span>
+            </div>
+
+            <div class="col-auto">
+                <select name="Action" id="bulkActionSelect" class="form-select form-select-sm" required onchange="handleBulkActionChange(this.value)">
+                    <option value="">-- Choose Bulk Action --</option>
+                    <option value="ChangeStatus">Change Stage</option>
+                    <option value="Assign">Reassign Representative</option>
+                    <option value="Archive">Archive Selected</option>
+                </select>
+            </div>
+
+            <div class="col-auto d-none" id="bulkStatusContainer">
+                <select name="TargetStatus" class="form-select form-select-sm">
+                    @foreach (var s in Enum.GetValues<LeadStatus>())
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-auto d-none" id="bulkAssignContainer">
+                <select name="TargetOwnerUserId" class="form-select form-select-sm">
+                    <option value="">-- Select Representative --</option>
+                    @foreach (var u in Model.AvailableUsers)
+                    {
+                        <option value="@u.Id">@(u.FullName ?? u.UserName)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary fw-semibold" onclick="return confirmBulkAction()">
+                    Apply Action
+                </button>
+            </div>
+        </form>
+    </div>
+}
+
 <!-- Leads Data Table -->
 <div class="crm-card overflow-hidden">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
             <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.05em;">
                 <tr>
-                    <th class="ps-4">Lead Name / Company</th>
+                    @if (isManagerOrAdmin)
+                    {
+                        <th style="width: 40px;" class="ps-3">
+                            <input type="checkbox" id="selectAllCheckbox" class="form-check-input" onclick="toggleSelectAll(this)" />
+                        </th>
+                    }
+                    <th class="ps-3">
+                        <a asp-action="Index" asp-route-sortBy="name" asp-route-sortOrder="@(Model.SortBy == "name" && Model.SortOrder == "asc" ? "desc" : "asc")"
+                           asp-route-search="@Model.Search" asp-route-status="@Model.Status" asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                           class="text-decoration-none text-muted">
+                            Lead Name / Company
+                            <i class="bi @(Model.SortBy == "name" ? (Model.SortOrder == "asc" ? "bi-sort-alpha-down text-primary" : "bi-sort-alpha-up text-primary") : "bi-arrow-down-up opacity-25")"></i>
+                        </a>
+                    </th>
                     <th>Contact</th>
-                    <th>Product / Budget</th>
-                    <th>Pipeline Stage</th>
-                    <th>AI Priority & Score</th>
+                    <th>
+                        <a asp-action="Index" asp-route-sortBy="budget" asp-route-sortOrder="@(Model.SortBy == "budget" && Model.SortOrder == "asc" ? "desc" : "asc")"
+                           asp-route-search="@Model.Search" asp-route-status="@Model.Status" asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                           class="text-decoration-none text-muted">
+                            Product / Budget
+                            <i class="bi @(Model.SortBy == "budget" ? (Model.SortOrder == "asc" ? "bi-sort-numeric-down text-primary" : "bi-sort-numeric-up text-primary") : "bi-arrow-down-up opacity-25")"></i>
+                        </a>
+                    </th>
+                    <th>
+                        <a asp-action="Index" asp-route-sortBy="status" asp-route-sortOrder="@(Model.SortBy == "status" && Model.SortOrder == "asc" ? "desc" : "asc")"
+                           asp-route-search="@Model.Search" asp-route-status="@Model.Status" asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                           class="text-decoration-none text-muted">
+                            Pipeline Stage
+                            <i class="bi @(Model.SortBy == "status" ? (Model.SortOrder == "asc" ? "bi-sort-down text-primary" : "bi-sort-up text-primary") : "bi-arrow-down-up opacity-25")"></i>
+                        </a>
+                    </th>
+                    <th>
+                        <a asp-action="Index" asp-route-sortBy="priority" asp-route-sortOrder="@(Model.SortBy == "priority" && Model.SortOrder == "asc" ? "desc" : "asc")"
+                           asp-route-search="@Model.Search" asp-route-status="@Model.Status" asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                           class="text-decoration-none text-muted">
+                            AI Priority & Score
+                            <i class="bi @(Model.SortBy == "priority" ? (Model.SortOrder == "asc" ? "bi-sort-down text-primary" : "bi-sort-up text-primary") : "bi-arrow-down-up opacity-25")"></i>
+                        </a>
+                    </th>
                     <th>Owner</th>
                     <th class="text-end pe-4">Actions</th>
                 </tr>
@@ -88,7 +191,7 @@
                 @if (!Model.Leads.Any())
                 {
                     <tr>
-                        <td colspan="7" class="text-center py-5 text-muted">
+                        <td colspan="@(isManagerOrAdmin ? 8 : 7)" class="text-center py-5 text-muted">
                             <i class="bi bi-inbox fs-2 text-secondary mb-2 d-block"></i>
                             <div class="fw-semibold">No leads found matching your criteria.</div>
                             <small>Try clearing your filters or create a new lead to get started.</small>
@@ -104,7 +207,13 @@
                         var aiClass = latestAi?.Classification.ToString() ?? "Warm";
 
                         <tr>
-                            <td class="ps-4">
+                            @if (isManagerOrAdmin)
+                            {
+                                <td class="ps-3">
+                                    <input type="checkbox" class="form-check-input lead-select-checkbox" value="@lead.LeadId" onchange="updateSelectedCount()" />
+                                </td>
+                            }
+                            <td class="ps-3">
                                 <a asp-action="Details" asp-route-id="@lead.LeadId" class="fw-bold text-dark text-decoration-none d-block">
                                     @lead.Name
                                 </a>
@@ -175,23 +284,90 @@
                     <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
                         <a class="page-link" asp-action="Index" asp-route-page="@(Model.CurrentPage - 1)" 
                            asp-route-search="@Model.Search" asp-route-status="@Model.Status" 
-                           asp-route-priority="@Model.Priority" asp-route-source="@Model.Source">Previous</a>
+                           asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                           asp-route-sortBy="@Model.SortBy" asp-route-sortOrder="@Model.SortOrder">Previous</a>
                     </li>
                     @for (int i = 1; i <= Model.TotalPages; i++)
                     {
                         <li class="page-item @(Model.CurrentPage == i ? "active" : "")">
                             <a class="page-link" asp-action="Index" asp-route-page="@i" 
                                asp-route-search="@Model.Search" asp-route-status="@Model.Status" 
-                               asp-route-priority="@Model.Priority" asp-route-source="@Model.Source">@i</a>
+                               asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                               asp-route-sortBy="@Model.SortBy" asp-route-sortOrder="@Model.SortOrder">@i</a>
                         </li>
                     }
                     <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
                         <a class="page-link" asp-action="Index" asp-route-page="@(Model.CurrentPage + 1)" 
                            asp-route-search="@Model.Search" asp-route-status="@Model.Status" 
-                           asp-route-priority="@Model.Priority" asp-route-source="@Model.Source">Next</a>
+                           asp-route-priority="@Model.Priority" asp-route-source="@Model.Source"
+                           asp-route-sortBy="@Model.SortBy" asp-route-sortOrder="@Model.SortOrder">Next</a>
                     </li>
                 </ul>
             </nav>
         </div>
     }
 </div>
+
+@section Scripts {
+    <script>
+        function toggleSelectAll(master) {
+            const checkboxes = document.querySelectorAll('.lead-select-checkbox');
+            checkboxes.forEach(cb => cb.checked = master.checked);
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.lead-select-checkbox:checked');
+            const count = checkboxes.length;
+            const panel = document.getElementById('bulkActionPanel');
+            const badge = document.getElementById('selectedCountBadge');
+            const container = document.getElementById('selectedLeadIdsContainer');
+
+            if (!panel) return;
+
+            if (count > 0) {
+                panel.classList.remove('d-none');
+                badge.innerText = count + ' selected';
+
+                // Populate hidden inputs
+                container.innerHTML = '';
+                checkboxes.forEach(cb => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'SelectedLeadIds';
+                    input.value = cb.value;
+                    container.appendChild(input);
+                });
+            } else {
+                panel.classList.add('d-none');
+                container.innerHTML = '';
+            }
+        }
+
+        function handleBulkActionChange(action) {
+            const statusContainer = document.getElementById('bulkStatusContainer');
+            const assignContainer = document.getElementById('bulkAssignContainer');
+
+            statusContainer.classList.add('d-none');
+            assignContainer.classList.add('d-none');
+
+            if (action === 'ChangeStatus') {
+                statusContainer.classList.remove('d-none');
+            } else if (action === 'Assign') {
+                assignContainer.classList.remove('d-none');
+            }
+        }
+
+        function confirmBulkAction() {
+            const action = document.getElementById('bulkActionSelect').value;
+            if (!action) {
+                alert('Please select an action to apply.');
+                return false;
+            }
+            if (action === 'Archive') {
+                return confirm('Are you sure you want to archive all selected leads?');
+            }
+            return true;
+        }
+    </script>
+}

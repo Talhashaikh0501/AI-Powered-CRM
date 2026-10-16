@@ -87,13 +87,24 @@
                         </div>
                     </div>
 
+                    @if (ViewBag.ShowResendConfirmation == true)
+                    {
+                        <div class="alert alert-warning py-2 small d-flex align-items-center justify-content-between mb-3" role="alert">
+                            <span><i class="bi bi-exclamation-triangle-fill me-1"></i> Email verification required.</span>
+                            <a asp-action="ResendEmailConfirmation" asp-route-email="@ViewBag.UnconfirmedEmail" class="btn btn-sm btn-outline-dark py-0 px-2 fw-semibold">Resend Link</a>
+                        </div>
+                    }
+
                     <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm mb-3">
                         <i class="bi bi-box-arrow-in-right me-1"></i> Sign In to CRM
                     </button>
 
-                    <div class="text-center mb-4">
+                    <div class="text-center mb-4 d-flex flex-column gap-2">
                         <a asp-action="RegisterCompany" class="text-decoration-none small text-primary fw-semibold">
                             <i class="bi bi-building-add me-1"></i> Create a new Company Workspace
+                        </a>
+                        <a asp-action="ResendEmailConfirmation" asp-route-email="@ViewBag.UnconfirmedEmail" class="text-decoration-none small text-muted">
+                            <i class="bi bi-envelope-check me-1"></i> Resend email verification link
                         </a>
                     </div>
                 </form>

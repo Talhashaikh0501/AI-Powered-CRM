@@ -21,7 +21,7 @@ namespace AI_Powered_CRM.Data
             var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
             // 1. Ensure Roles Exist
-            string[] roles = new[] { "PlatformSuperAdmin", "CompanyAdmin", "Admin", "Manager", "SalesExecutive" };
+            string[] roles = new[] { "PlatformSuperAdmin", "SuperAdmin", "CompanyAdmin", "Admin", "Manager", "SalesExecutive" };
             foreach (var role in roles)
             {
                 if (!await roleManager.RoleExistsAsync(role))
@@ -135,6 +135,54 @@ namespace AI_Powered_CRM.Data
                             bootstrapPass,
                             "Admin"
                         );
+                    }
+                }
+            }
+
+            // -------------------------------------------------------------------------
+            // Platform SuperAdmin First-Time Bootstrap Provisioning (Config / Env-Driven)
+            // -------------------------------------------------------------------------
+            var superAdminEmail = config?["Security:SuperAdminBootstrap:Email"]
+                               ?? Environment.GetEnvironmentVariable("CRM_SUPERADMIN_EMAIL");
+            var superAdminPass  = config?["Security:SuperAdminBootstrap:Password"]
+                               ?? Environment.GetEnvironmentVariable("CRM_SUPERADMIN_PASSWORD");
+            var superAdminName  = config?["Security:SuperAdminBootstrap:FullName"]
+                               ?? Environment.GetEnvironmentVariable("CRM_SUPERADMIN_FULLNAME")
+                               ?? "Platform SuperAdmin";
+
+            if (!string.IsNullOrWhiteSpace(superAdminEmail) && !string.IsNullOrWhiteSpace(superAdminPass))
+            {
+                var cleanEmail = superAdminEmail.Trim();
+                var existingSuperAdmin = await userManager.FindByEmailAsync(cleanEmail);
+                if (existingSuperAdmin == null)
+                {
+                    var superAdminUser = new ApplicationUser
+                    {
+                        UserName = cleanEmail,
+                        Email = cleanEmail,
+                        FullName = superAdminName.Trim(),
+                        EmailConfirmed = true,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    var createResult = await userManager.CreateAsync(superAdminUser, superAdminPass);
+                    if (createResult.Succeeded)
+                    {
+                        await userManager.AddToRoleAsync(superAdminUser, "PlatformSuperAdmin");
+                        await userManager.AddToRoleAsync(superAdminUser, "SuperAdmin");
+                        // Platform SuperAdmin MUST NEVER have TenantMembership to maintain strict separation
+                    }
+                }
+                else
+                {
+                    if (!await userManager.IsInRoleAsync(existingSuperAdmin, "PlatformSuperAdmin"))
+                    {
+                        await userManager.AddToRoleAsync(existingSuperAdmin, "PlatformSuperAdmin");
+                    }
+                    if (!await userManager.IsInRoleAsync(existingSuperAdmin, "SuperAdmin"))
+                    {
+                        await userManager.AddToRoleAsync(existingSuperAdmin, "SuperAdmin");
                     }
                 }
             }

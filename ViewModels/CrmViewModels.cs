@@ -19,6 +19,17 @@ namespace AI_Powered_CRM.ViewModels
         public LeadStatus? Status { get; set; }
         public LeadPriority? Priority { get; set; }
         public string? Source { get; set; }
+        public string? SortBy { get; set; }
+        public string? SortOrder { get; set; }
+        public List<ApplicationUser> AvailableUsers { get; set; } = new List<ApplicationUser>();
+    }
+
+    public class BulkLeadActionViewModel
+    {
+        public List<int> SelectedLeadIds { get; set; } = new List<int>();
+        public string Action { get; set; } = string.Empty; // "Assign", "ChangeStatus", "Archive"
+        public string? TargetOwnerUserId { get; set; }
+        public LeadStatus? TargetStatus { get; set; }
     }
 
     public class LeadCreateEditViewModel

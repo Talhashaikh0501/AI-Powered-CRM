@@ -1,0 +1,32 @@
+@{
+    ViewData["Title"] = "Email Verification Failed";
+    Layout = "_Layout";
+    var errorMessage = ViewBag.ErrorMessage as string ?? "This verification link is invalid or has expired.";
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 p-4 p-md-5 text-center" style="max-width: 520px; width: 100%;">
+        <div class="mb-4">
+            <div class="rounded-circle bg-danger bg-opacity-10 text-danger d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 72px; height: 72px;">
+                <i class="bi bi-x-circle-fill fs-1"></i>
+            </div>
+            <h3 class="fw-bold text-dark mb-2">Verification Failed</h3>
+            <p class="text-danger small mb-0">
+                @errorMessage
+            </p>
+        </div>
+
+        <div class="alert alert-light border small text-secondary text-start mb-4">
+            For security purposes, email verification tokens expire after a limited period. You can request a fresh confirmation link below.
+        </div>
+
+        <div class="d-flex flex-column gap-2">
+            <a asp-action="ResendEmailConfirmation" class="btn btn-primary py-2 fw-semibold">
+                <i class="bi bi-arrow-repeat me-1"></i> Request New Verification Link
+            </a>
+            <a asp-action="Login" class="btn btn-outline-secondary py-2 small">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Back to Sign In
+            </a>
+        </div>
+    </div>
+</div>

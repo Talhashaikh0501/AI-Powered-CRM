@@ -158,7 +158,7 @@ namespace AI_Powered_CRM.Services.Implementations
                 Email = normalizedEmail,
                 FullName = model.AdminFullName.Trim(),
                 IsActive = true,
-                EmailConfirmed = true,
+                EmailConfirmed = false,
                 CreatedAt = DateTime.UtcNow
             };
 

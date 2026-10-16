@@ -1,0 +1,46 @@
+@{
+    ViewData["Title"] = "Resend Verification Link";
+    Layout = "_Layout";
+    var prefilledEmail = ViewBag.Email as string ?? string.Empty;
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 p-4 p-md-5" style="max-width: 520px; width: 100%;">
+        <div class="text-center mb-4">
+            <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 64px; height: 64px;">
+                <i class="bi bi-envelope-arrow-up fs-2"></i>
+            </div>
+            <h3 class="fw-bold text-dark mb-1">Resend Email Verification</h3>
+            <p class="text-muted small">Enter your account email to receive a fresh verification link.</p>
+        </div>
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger py-2 small" role="alert">
+                @Html.ValidationSummary(false, "", new { @class = "mb-0" })
+            </div>
+        }
+
+        <form asp-action="ResendEmailConfirmationPost" method="post">
+            @Html.AntiForgeryToken()
+
+            <div class="mb-4">
+                <label class="form-label small fw-semibold text-secondary">Work Email Address</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                    <input type="email" name="email" value="@prefilledEmail" class="form-control bg-light border-start-0" placeholder="founder@company.com" required autofocus />
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm mb-3">
+                <i class="bi bi-send me-1"></i> Send Verification Link
+            </button>
+
+            <div class="text-center">
+                <a asp-action="Login" class="text-decoration-none small text-muted">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Sign In
+                </a>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,46 @@
+@{
+    ViewData["Title"] = "Confirm Your Email";
+    Layout = "_Layout";
+    var email = ViewBag.Email as string;
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 p-4 p-md-5 text-center" style="max-width: 540px; width: 100%;">
+        <div class="mb-4">
+            <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 72px; height: 72px;">
+                <i class="bi bi-envelope-paper-heart fs-1"></i>
+            </div>
+            <h3 class="fw-bold text-dark mb-2">Check your email</h3>
+            <p class="text-muted small">
+                We've sent a verification link to
+                @if (!string.IsNullOrEmpty(email))
+                {
+                    <strong class="text-dark">@email</strong>
+                }
+                else
+                {
+                    <span>your registered work email address</span>
+                }
+                .
+            </p>
+        </div>
+
+        <div class="alert alert-light border small text-secondary text-start mb-4">
+            <div class="fw-semibold text-dark mb-1"><i class="bi bi-info-circle me-1 text-primary"></i> Next steps:</div>
+            <ol class="ps-3 mb-0">
+                <li>Open the email from <strong>AI-Powered CRM</strong>.</li>
+                <li>Click the <strong>Verify Email Address</strong> button to activate your account.</li>
+                <li>Sign in to access your newly created workspace.</li>
+            </ol>
+        </div>
+
+        <div class="d-flex flex-column gap-2">
+            <a asp-action="Login" class="btn btn-primary py-2 fw-semibold">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Return to Sign In
+            </a>
+            <a asp-action="ResendEmailConfirmation" asp-route-email="@email" class="btn btn-outline-secondary py-2 small">
+                <i class="bi bi-arrow-repeat me-1"></i> Didn't receive an email? Resend link
+            </a>
+        </div>
+    </div>
+</div>

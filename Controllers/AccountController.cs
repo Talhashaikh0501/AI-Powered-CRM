@@ -22,6 +22,7 @@ namespace AI_Powered_CRM.Controllers
         private readonly IAuditService                  _auditService;
         private readonly ICompanyOnboardingService      _onboardingService;
         private readonly ITenantInvitationService       _invitationService;
+        private readonly IEmailDeliveryService          _emailDeliveryService;
         private readonly ApplicationDbContext           _context;
         private readonly ITenantContext                 _tenantContext;
         private readonly ILogger<AccountController>     _logger;
@@ -32,18 +33,20 @@ namespace AI_Powered_CRM.Controllers
             IAuditService                  auditService,
             ICompanyOnboardingService      onboardingService,
             ITenantInvitationService       invitationService,
+            IEmailDeliveryService          emailDeliveryService,
             ApplicationDbContext           context,
             ITenantContext                 tenantContext,
             ILogger<AccountController>     logger)
         {
-            _signInManager     = signInManager;
-            _userManager       = userManager;
-            _auditService      = auditService;
-            _onboardingService = onboardingService;
-            _invitationService = invitationService;
-            _context           = context;
-            _tenantContext     = tenantContext;
-            _logger            = logger;
+            _signInManager        = signInManager;
+            _userManager          = userManager;
+            _auditService         = auditService;
+            _onboardingService    = onboardingService;
+            _invitationService    = invitationService;
+            _emailDeliveryService = emailDeliveryService;
+            _context              = context;
+            _tenantContext        = tenantContext;
+            _logger               = logger;
         }
 
         // -------------------------------------------------------
@@ -100,6 +103,20 @@ namespace AI_Powered_CRM.Controllers
                 return View(model);
             }
 
+            // Check email confirmation (PlatformSuperAdmin accounts bypass this check)
+            var isPlatformSuperAdmin = await _userManager.IsInRoleAsync(user, "PlatformSuperAdmin") ||
+                                       await _userManager.IsInRoleAsync(user, "SuperAdmin");
+
+            if (!user.EmailConfirmed && !isPlatformSuperAdmin)
+            {
+                _logger.LogWarning("Login attempt for unconfirmed account {UserId}.", user.Id);
+                await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginBlocked_UnconfirmedEmail");
+                ModelState.AddModelError(string.Empty, "Your email address has not been confirmed yet. Please verify your email before logging in.");
+                ViewBag.ShowResendConfirmation = true;
+                ViewBag.UnconfirmedEmail = model.Email;
+                return View(model);
+            }
+
             var result = await _signInManager.PasswordSignInAsync(
                 user.UserName ?? model.Email,
                 model.Password,
@@ -113,6 +130,14 @@ namespace AI_Powered_CRM.Controllers
                 // we also log the successful login for audit trail)
                 _logger.LogInformation("User {UserId} logged in successfully.", user.Id);
                 await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginSuccess");
+
+                if (isPlatformSuperAdmin)
+                {
+                    if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) && !returnUrl.StartsWith("/Dashboard"))
+                        return Redirect(returnUrl);
+
+                    return RedirectToAction("Index", "Platform");
+                }
 
                 if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                     return Redirect(returnUrl);
@@ -196,12 +221,109 @@ namespace AI_Powered_CRM.Controllers
             var user = await _userManager.FindByEmailAsync(model.ContactEmail);
             if (user != null)
             {
-                await _signInManager.SignInAsync(user, isPersistent: false);
-                TempData["SuccessMessage"] = $"Welcome to your new workspace for {model.CompanyName}! Your setup is complete.";
-                return RedirectToAction("Index", "Dashboard");
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                var confirmationLink = Url.Action(nameof(ConfirmEmail), "Account", new { userId = user.Id, token }, Request.Scheme)
+                                       ?? $"/Account/ConfirmEmail?userId={user.Id}&token={Uri.EscapeDataString(token)}";
+
+                await _emailDeliveryService.SendEmailConfirmationAsync(user.Email!, confirmationLink, user.FullName ?? user.Email ?? "Customer");
+                return RedirectToAction(nameof(RegisterConfirmation), new { email = model.ContactEmail });
             }
 
-            TempData["SuccessMessage"] = "Your company workspace was registered successfully. Please sign in.";
+            TempData["SuccessMessage"] = "Your company workspace was registered successfully. Please check your email for confirmation instructions.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/RegisterConfirmation
+        // -------------------------------------------------------
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult RegisterConfirmation(string? email)
+        {
+            ViewBag.Email = email ?? string.Empty;
+            return View();
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/ConfirmEmail
+        // -------------------------------------------------------
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> ConfirmEmail(string? userId, string? token)
+        {
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(token))
+            {
+                ViewBag.ErrorMessage = "The email confirmation link is invalid or incomplete.";
+                return View("ConfirmEmailError");
+            }
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                ViewBag.ErrorMessage = "The user account associated with this confirmation link could not be found.";
+                return View("ConfirmEmailError");
+            }
+
+            if (user.EmailConfirmed)
+            {
+                ViewBag.AlreadyConfirmed = true;
+                return View("ConfirmEmailSuccess");
+            }
+
+            var result = await _userManager.ConfirmEmailAsync(user, token);
+            if (result.Succeeded)
+            {
+                _logger.LogInformation("Email successfully confirmed for user {UserId}.", user.Id);
+                await _auditService.LogAsync(user.Id, "Account", user.Id, "EmailConfirmed");
+                return View("ConfirmEmailSuccess");
+            }
+
+            _logger.LogWarning("Email confirmation failed for user {UserId}. Errors: {Errors}",
+                user.Id, string.Join("; ", result.Errors.Select(e => e.Description)));
+            ViewBag.ErrorMessage = "This email confirmation link has expired or is invalid. Please request a new confirmation email below.";
+            ViewBag.UserId = userId;
+            return View("ConfirmEmailError");
+        }
+
+        // -------------------------------------------------------
+        // GET /Account/ResendEmailConfirmation
+        // -------------------------------------------------------
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult ResendEmailConfirmation(string? email)
+        {
+            ViewBag.Email = email ?? string.Empty;
+            return View();
+        }
+
+        // -------------------------------------------------------
+        // POST /Account/ResendEmailConfirmation
+        // -------------------------------------------------------
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login")]
+        public async Task<IActionResult> ResendEmailConfirmationPost(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                ModelState.AddModelError(string.Empty, "Email address is required.");
+                return View("ResendEmailConfirmation");
+            }
+
+            var user = await _userManager.FindByEmailAsync(email.Trim());
+            if (user != null && !user.EmailConfirmed)
+            {
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                var confirmationLink = Url.Action(nameof(ConfirmEmail), "Account", new { userId = user.Id, token }, Request.Scheme)
+                                       ?? $"/Account/ConfirmEmail?userId={user.Id}&token={Uri.EscapeDataString(token)}";
+
+                await _emailDeliveryService.SendEmailConfirmationAsync(user.Email!, confirmationLink, user.FullName ?? user.Email ?? "Customer");
+                await _auditService.LogAsync(user.Id, "Account", user.Id, "EmailConfirmationResent");
+            }
+
+            // Universal anti-enumeration response message
+            TempData["SuccessMessage"] = "If an unconfirmed account exists with this email address, a new verification link has been dispatched. Please check your inbox.";
             return RedirectToAction(nameof(Login));
         }
 

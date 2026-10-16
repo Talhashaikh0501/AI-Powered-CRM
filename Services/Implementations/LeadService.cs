@@ -64,7 +64,9 @@ namespace AI_Powered_CRM.Services.Implementations
             string? currentUserId,
             string? role,
             int page = 1,
-            int pageSize = 15)
+            int pageSize = 15,
+            string? sortBy = null,
+            string? sortOrder = null)
         {
             var query = _context.Leads
                 .Include(l => l.OwnerUser)
@@ -113,8 +115,23 @@ namespace AI_Powered_CRM.Services.Implementations
 
             int totalCount = await query.CountAsync();
 
+            // Dynamic column sorting
+            query = (sortBy?.ToLowerInvariant(), sortOrder?.ToLowerInvariant()) switch
+            {
+                ("name", "asc") => query.OrderBy(l => l.Name),
+                ("name", "desc") => query.OrderByDescending(l => l.Name),
+                ("budget", "asc") => query.OrderBy(l => l.Budget ?? 0),
+                ("budget", "desc") => query.OrderByDescending(l => l.Budget ?? 0),
+                ("priority", "asc") => query.OrderBy(l => l.Priority),
+                ("priority", "desc") => query.OrderByDescending(l => l.Priority),
+                ("status", "asc") => query.OrderBy(l => l.Status),
+                ("status", "desc") => query.OrderByDescending(l => l.Status),
+                ("createdat", "asc") => query.OrderBy(l => l.CreatedAt),
+                ("createdat", "desc") => query.OrderByDescending(l => l.CreatedAt),
+                _ => query.OrderByDescending(l => l.UpdatedAt)
+            };
+
             var leads = await query
-                .OrderByDescending(l => l.UpdatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -181,6 +198,7 @@ namespace AI_Powered_CRM.Services.Implementations
 
             _context.Leads.Add(lead);
             await _context.SaveChangesAsync();
+            _assignmentService?.NotifyLeadPersisted(lead.TenantId, ownerUserId);
 
             // Initial status history
             _context.LeadStatusHistories.Add(new LeadStatusHistory
@@ -369,6 +387,89 @@ namespace AI_Powered_CRM.Services.Implementations
             await _context.SaveChangesAsync();
             await _auditService.LogAsync(currentUserId, "Lead", leadId.ToString(), "Archived");
             return true;
+        }
+
+        public async Task<int> ExecuteBulkActionAsync(List<int> leadIds, string action, string? targetOwnerUserId, LeadStatus? targetStatus, string currentUserId, string role)
+        {
+            if (leadIds == null || !leadIds.Any()) return 0;
+            if (role != "Admin" && role != "Manager") return 0;
+
+            var leads = await _context.Leads
+                .Where(l => leadIds.Contains(l.LeadId) && !l.IsArchived)
+                .ToListAsync();
+
+            if (!leads.Any()) return 0;
+
+            int count = 0;
+
+            if (string.Equals(action, "Archive", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var lead in leads)
+                {
+                    lead.IsArchived = true;
+                    lead.UpdatedAt = DateTime.UtcNow;
+                    _context.LeadActivities.Add(new LeadActivity
+                    {
+                        LeadId = lead.LeadId,
+                        UserId = currentUserId,
+                        Type = ActivityType.StatusChange,
+                        Description = "Lead archived via bulk action",
+                        OccurredAt = DateTime.UtcNow
+                    });
+                    count++;
+                }
+                await _context.SaveChangesAsync();
+                await _auditService.LogAsync(currentUserId, "Lead", "Bulk", "BulkArchived", new { Count = count, LeadIds = leadIds });
+            }
+            else if (string.Equals(action, "ChangeStatus", StringComparison.OrdinalIgnoreCase) && targetStatus.HasValue)
+            {
+                foreach (var lead in leads)
+                {
+                    if (lead.Status != targetStatus.Value)
+                    {
+                        var old = lead.Status;
+                        lead.Status = targetStatus.Value;
+                        lead.UpdatedAt = DateTime.UtcNow;
+                        _context.LeadStatusHistories.Add(new LeadStatusHistory
+                        {
+                            LeadId = lead.LeadId,
+                            OldStatus = old,
+                            NewStatus = targetStatus.Value,
+                            ChangedByUserId = currentUserId,
+                            Notes = "Status updated via bulk action",
+                            ChangedAt = DateTime.UtcNow
+                        });
+                        count++;
+                    }
+                }
+                await _context.SaveChangesAsync();
+                await _auditService.LogAsync(currentUserId, "Lead", "Bulk", "BulkStatusChanged", new { Count = count, NewStatus = targetStatus.Value.ToString() });
+            }
+            else if (string.Equals(action, "Assign", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(targetOwnerUserId))
+            {
+                var targetUser = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetOwnerUserId && u.IsActive);
+                if (targetUser != null)
+                {
+                    foreach (var lead in leads)
+                    {
+                        lead.OwnerUserId = targetOwnerUserId;
+                        lead.UpdatedAt = DateTime.UtcNow;
+                        _context.LeadActivities.Add(new LeadActivity
+                        {
+                            LeadId = lead.LeadId,
+                            UserId = currentUserId,
+                            Type = ActivityType.StatusChange,
+                            Description = $"Reassigned to {targetUser.FullName ?? targetUser.UserName} via bulk action",
+                            OccurredAt = DateTime.UtcNow
+                        });
+                        count++;
+                    }
+                    await _context.SaveChangesAsync();
+                    await _auditService.LogAsync(currentUserId, "Lead", "Bulk", "BulkReassigned", new { Count = count, TargetOwner = targetOwnerUserId });
+                }
+            }
+
+            return count;
         }
 
         public async Task<AILeadInsight?> RunAIAnalysisAsync(int leadId, string currentUserId, string role)
