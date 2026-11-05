@@ -124,7 +124,7 @@ namespace AI_Powered_CRM.Security
                         {
                             _logger.LogWarning("Security Block: Platform SuperAdmin {UserId} attempted delegated tenant access to {TenantId} without authorized ticket reference.", userId, headerTenantId.Value);
                             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                            await WriteForbiddenOrErrorAsync(context, "Forbidden: delegated support access requires an approved server-side support ticket.");
+                            await WriteForbiddenOrErrorAsync(context, "Forbidden: Platform SuperAdmin delegated tenant access requires an approved server-side support ticket.");
                             return;
                         }
 
@@ -176,7 +176,7 @@ namespace AI_Powered_CRM.Security
                             UserId = userId,
                             EntityType = "Tenant",
                             EntityId = targetTenant.TenantId.ToString(),
-                            Action = "PlatformSuperAdminWorkspaceAccess",
+                            Action = isOwnerWorkspaceSession ? "PlatformSuperAdminWorkspaceAccess" : "PlatformSuperAdminDelegatedAccess",
                             DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
                             {
                                 AccessMode = isOwnerWorkspaceSession ? "PlatformOwnerWorkspace" : "CustomerApprovedSupport",
