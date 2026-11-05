@@ -123,6 +123,9 @@
                 <dt class="col-sm-5 text-muted">Trial Expiration:</dt>
                 <dd class="col-sm-7">@(Model.TrialEndsAt.HasValue ? Model.TrialEndsAt.Value.ToString("dd MMM yyyy") : "N/A")</dd>
 
+                <dt class="col-sm-5 text-muted">Subscription Renews:</dt>
+                <dd class="col-sm-7">@(Model.SubscriptionRenewsAt.HasValue ? Model.SubscriptionRenewsAt.Value.ToString("dd MMM yyyy") : "Not scheduled")</dd>
+
                 <dt class="col-sm-5 text-muted">Currency:</dt>
                 <dd class="col-sm-7">@Model.DefaultCurrency (@Model.CurrencySymbol)</dd>
 
@@ -255,6 +258,17 @@
                     <div class="mb-3">
                         <label class="form-label small fw-semibold text-secondary">Monthly AI Request Limit</label>
                         <input type="number" name="MonthlyAiRequestLimit" value="@Model.MonthlyAiRequestLimit" min="0" max="100000" class="form-control form-control-sm" required />
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small fw-semibold text-secondary">Trial Expiry Date</label>
+                            <input type="date" name="TrialEndsAt" value="@(Model.TrialEndsAt?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small fw-semibold text-secondary">Subscription Renewal / Expiry</label>
+                            <input type="date" name="SubscriptionRenewsAt" value="@(Model.SubscriptionRenewsAt?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+                        </div>
                     </div>
 
                     <div class="mb-3">
