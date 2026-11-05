@@ -166,6 +166,14 @@ namespace AIPoweredCRM.Tests
                 await migrator.MigrateAsync("20261015164702_Phase2MultiTenantCore");
             }
 
+            // Apply subsequent additive migrations so the current EF model and test schema stay aligned.
+            // This includes the dynamic subscription-plan catalogue migration.
+            using (var latestMigrationContext = CreateDbContext())
+            {
+                var migrator = latestMigrationContext.Database.GetService<IMigrator>();
+                await migrator.MigrateAsync();
+            }
+
             // Step 5: Post-migration Verification
             var primaryTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
@@ -206,6 +214,9 @@ namespace AIPoweredCRM.Tests
                 Assert.NotNull(tenant);
                 Assert.Equal("INR", tenant.DefaultCurrency);
                 Assert.True(tenant.IsActive);
+                Assert.NotNull(tenant.SubscriptionPlanId);
+                Assert.True(await verifyContext.SubscriptionPlans.AnyAsync(
+                    p => p.PlanId == tenant.SubscriptionPlanId));
 
                 var settings = await verifyContext.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == primaryTenantId);
                 Assert.NotNull(settings);
