@@ -496,13 +496,12 @@ namespace AIPoweredCRM.Tests
         }
 
         [Fact]
-        public async Task TC_PLATFORM_SUPERADMIN_REDIRECT_005_SuperAdminRedirectsToPlatform()
+        public async Task TC_PLATFORM_SUPERADMIN_REDIRECT_005_PlatformAccountUsesDedicatedLoginOnly()
         {
             using var scope = _factory.Services.CreateScope();
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
             var signInManager = scope.ServiceProvider.GetRequiredService<SignInManager<ApplicationUser>>();
-            var onboardingService = scope.ServiceProvider.GetRequiredService<ICompanyOnboardingService>();
 
             if (!await roleManager.RoleExistsAsync("PlatformSuperAdmin"))
                 await roleManager.CreateAsync(new IdentityRole("PlatformSuperAdmin"));
@@ -519,19 +518,9 @@ namespace AIPoweredCRM.Tests
                 SecurityStamp = Guid.NewGuid().ToString()
             };
 
-            await userManager.CreateAsync(psaUser, "Pass@12345");
+            var createResult = await userManager.CreateAsync(psaUser, "Pass@12345");
+            Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(e => e.Description)));
             await userManager.AddToRoleAsync(psaUser, "PlatformSuperAdmin");
-
-            var controller = new AccountController(
-                signInManager,
-                userManager,
-                scope.ServiceProvider.GetRequiredService<IAuditService>(),
-                onboardingService,
-                scope.ServiceProvider.GetRequiredService<ITenantInvitationService>(),
-                scope.ServiceProvider.GetRequiredService<IEmailDeliveryService>(),
-                scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(),
-                scope.ServiceProvider.GetRequiredService<ITenantContext>(),
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<AccountController>.Instance);
 
             var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
             {
@@ -539,18 +528,36 @@ namespace AIPoweredCRM.Tests
             };
             var httpContextAccessor = scope.ServiceProvider.GetService<Microsoft.AspNetCore.Http.IHttpContextAccessor>();
             if (httpContextAccessor != null)
-            {
                 httpContextAccessor.HttpContext = httpContext;
-            }
-            controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
-            {
-                HttpContext = httpContext
-            };
-            controller.Url = new TestUrlHelper();
 
-            // Test login redirect for PlatformSuperAdmin
-            var result = await controller.Login(new LoginViewModel { Email = email, Password = "Pass@12345" });
-            var redirectResult = Assert.IsType<Microsoft.AspNetCore.Mvc.RedirectToActionResult>(result);
+            var tenantController = new AccountController(
+                signInManager,
+                userManager,
+                scope.ServiceProvider.GetRequiredService<IAuditService>(),
+                scope.ServiceProvider.GetRequiredService<ICompanyOnboardingService>(),
+                scope.ServiceProvider.GetRequiredService<ITenantInvitationService>(),
+                scope.ServiceProvider.GetRequiredService<IEmailDeliveryService>(),
+                scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(),
+                scope.ServiceProvider.GetRequiredService<ITenantContext>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AccountController>.Instance);
+
+            tenantController.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext };
+            var tenantLoginResult = await tenantController.Login(new LoginViewModel { Email = email, Password = "Pass@12345" });
+            Assert.IsType<Microsoft.AspNetCore.Mvc.ViewResult>(tenantLoginResult);
+            Assert.False(tenantController.ModelState.IsValid);
+            Assert.False(httpContext.User.Identity?.IsAuthenticated ?? false);
+
+            var platformController = new PlatformAuthController(
+                signInManager,
+                userManager,
+                scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(),
+                scope.ServiceProvider.GetRequiredService<IAuditService>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<PlatformAuthController>.Instance);
+
+            platformController.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext };
+            platformController.Url = new TestUrlHelper();
+            var platformLoginResult = await platformController.Login(new LoginViewModel { Email = email, Password = "Pass@12345" });
+            var redirectResult = Assert.IsType<Microsoft.AspNetCore.Mvc.RedirectToActionResult>(platformLoginResult);
             Assert.Equal("Index", redirectResult.ActionName);
             Assert.Equal("Platform", redirectResult.ControllerName);
         }
