@@ -17,7 +17,15 @@
             Tenant ID: <span class="font-monospace text-dark">@Model.TenantId</span> | Slug: <span class="font-monospace text-dark">/t/@Model.Slug</span>
         </p>
     </div>
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <form asp-action="EnterWorkspace" method="post" class="d-flex align-items-center gap-2 flex-wrap">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="tenantId" value="@Model.TenantId" />
+            <input type="text" name="reason" class="form-control form-control-sm" style="max-width: 230px;" minlength="8" maxlength="500" required placeholder="Reason for workspace access" aria-label="Reason for workspace access" />
+            <button type="submit" class="btn btn-dark btn-sm">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Open CRM Workspace
+            </button>
+        </form>
         <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editPlanModal">
             <i class="bi bi-sliders me-1"></i> Adjust Plan & Quotas
         </button>
