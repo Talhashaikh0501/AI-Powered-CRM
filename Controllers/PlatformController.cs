@@ -192,6 +192,7 @@ namespace AI_Powered_CRM.Controllers
                     Tier = tenant.SubscriptionTier,
                     Status = tenant.SubscriptionStatus,
                     TrialEndsAt = tenant.TrialEndsAt,
+                    SubscriptionRenewsAt = tenant.SubscriptionRenewsAt,
                     IsActive = tenant.IsActive,
                     CreatedAt = tenant.CreatedAt,
                     UpdatedAt = tenant.UpdatedAt,
@@ -299,12 +300,16 @@ namespace AI_Powered_CRM.Controllers
                 var oldSeats = tenant.MaxUserSeats;
                 var oldLeads = tenant.MaxLeadsQuota;
                 var oldAiLimit = tenant.MonthlyAiRequestLimit;
+                var oldTrialEndsAt = tenant.TrialEndsAt;
+                var oldRenewsAt = tenant.SubscriptionRenewsAt;
 
                 tenant.SubscriptionTier = model.SubscriptionTier;
                 tenant.SubscriptionStatus = model.SubscriptionStatus;
                 tenant.MaxUserSeats = model.MaxUserSeats;
                 tenant.MaxLeadsQuota = model.MaxLeadsQuota;
                 tenant.MonthlyAiRequestLimit = model.MonthlyAiRequestLimit;
+                tenant.TrialEndsAt = model.TrialEndsAt;
+                tenant.SubscriptionRenewsAt = model.SubscriptionRenewsAt;
                 tenant.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
@@ -321,7 +326,11 @@ namespace AI_Powered_CRM.Controllers
                     NewLeadsQuota = model.MaxLeadsQuota,
                     OldAiLimit = oldAiLimit,
                     NewAiLimit = model.MonthlyAiRequestLimit,
-                    Reason = model.Reason ?? "Administrative quota adjustment"
+                    OldTrialEndsAt = oldTrialEndsAt,
+                    NewTrialEndsAt = model.TrialEndsAt,
+                    OldSubscriptionRenewsAt = oldRenewsAt,
+                    NewSubscriptionRenewsAt = model.SubscriptionRenewsAt,
+                    Reason = model.Reason ?? "Administrative subscription and quota adjustment"
                 });
 
                 _logger.LogInformation("SuperAdmin {UserId} updated tenant plan for {TenantId}: Tier {OldTier}->{NewTier}, Seats {OldSeats}->{NewSeats}",
