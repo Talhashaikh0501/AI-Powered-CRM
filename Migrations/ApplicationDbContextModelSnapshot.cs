@@ -691,11 +691,6 @@ namespace AI_Powered_CRM.Migrations
                     b.Navigation("SubscriptionPlan");
                 });
 
-            modelBuilder.Entity("AI_Powered_CRM.Models.Entities.SubscriptionPlan", b =>
-                {
-                    b.Navigation("Tenants");
-                });
-
             modelBuilder.Entity("AI_Powered_CRM.Models.Entities.TenantSetting", b =>
                 {
                     b.Property<Guid>("TenantId")
