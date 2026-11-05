@@ -236,6 +236,21 @@
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Subscription Plan</label>
+                        <select name="SubscriptionPlanId" class="form-select form-select-sm">
+                            <option value="">Custom quotas / legacy tier (no catalogue plan)</option>
+                            @if (ViewBag.SubscriptionPlans != null)
+                            {
+                                foreach (var plan in (IEnumerable<AI_Powered_CRM.Models.Entities.SubscriptionPlan>)ViewBag.SubscriptionPlans)
+                                {
+                                    <option value="@plan.PlanId" selected="@(Model.CurrentPlanId == plan.PlanId)">@plan.Name — ₹@plan.MonthlyPriceInr.ToString("N0") / month</option>
+                                }
+                            }
+                        </select>
+                        <small class="text-muted">Selecting a plan applies its current seat, lead, and AI quotas.</small>
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label small fw-semibold text-secondary">Subscription Tier</label>
                         <select name="SubscriptionTier" class="form-select form-select-sm" asp-for="Tier" asp-items="Html.GetEnumSelectList<AI_Powered_CRM.Models.Enums.SubscriptionTier>()"></select>
                     </div>
