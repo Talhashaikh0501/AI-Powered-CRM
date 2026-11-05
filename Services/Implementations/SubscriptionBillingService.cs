@@ -52,8 +52,10 @@ namespace AI_Powered_CRM.Services.Implementations
                          (p.Code == "professional" && currentTier == SubscriptionTier.Professional) ||
                          (p.Code == "enterprise" && currentTier == SubscriptionTier.Enterprise) ||
                          (p.Code == "free-trial" && currentTier == SubscriptionTier.FreeTrial)),
-                    Highlights = System.Text.Json.JsonSerializer.Deserialize<List<string>>(p.HighlightsJson, null) ?? new List<string>(),
-                    IncludedFeatures = System.Text.Json.JsonSerializer.Deserialize<List<string>>(p.IncludedFeaturesJson, null) ?? new List<string>()
+                    Highlights = System.Text.Json.JsonSerializer.Deserialize<List<string>>(
+                        p.HighlightsJson, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<string>(),
+                    IncludedFeatures = System.Text.Json.JsonSerializer.Deserialize<List<string>>(
+                        p.IncludedFeaturesJson, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<string>()
                 })
                 .ToList();
         }
