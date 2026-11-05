@@ -31,13 +31,13 @@ namespace AI_Powered_CRM.Controllers
             ISupportAccessService supportAccessService,
             IAuditService auditService,
             ILogger<PlatformController> logger,
-            IDataProtectionProvider dataProtectionProvider)
+            IDataProtectionProvider? dataProtectionProvider = null)
         {
             _context = context;
             _supportAccessService = supportAccessService;
             _auditService = auditService;
             _logger = logger;
-            _dataProtectionProvider = dataProtectionProvider;
+            _dataProtectionProvider = dataProtectionProvider!;
         }
 
         private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "SuperAdmin";
