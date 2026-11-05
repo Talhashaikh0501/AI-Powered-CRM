@@ -309,6 +309,8 @@
                 </div>
 
                 <ul class="sidebar-nav">
+                    @if (!(User.IsInRole("PlatformSuperAdmin") || User.IsInRole("SuperAdmin")) || Context.Request.Cookies.ContainsKey("crm_platform_workspace_access"))
+                    {
                     <li class="nav-section-title">Core Management</li>
                     <li class="nav-item-custom">
                         <a class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Dashboard" ? "active" : "")"
@@ -405,6 +407,8 @@
                         </li>
                     }
 
+                    }
+
                     @if (User.IsInRole("PlatformSuperAdmin") || User.IsInRole("SuperAdmin"))
                     {
                         <li class="nav-section-title text-danger">Platform Operations</li>
@@ -466,10 +470,13 @@
                         <button class="btn btn-sm btn-light d-lg-none" type="button" id="sidebarToggle">
                             <i class="bi bi-list fs-5"></i>
                         </button>
+                        @if (!(User.IsInRole("PlatformSuperAdmin") || User.IsInRole("SuperAdmin")) || Context.Request.Cookies.ContainsKey("crm_platform_workspace_access"))
+                        {
                         <form asp-controller="Leads" asp-action="Index" method="get" class="topbar-search d-none d-md-block">
                             <i class="bi bi-search"></i>
                             <input type="text" name="search" placeholder="Search leads by name, phone, email, product..." />
                         </form>
+                        }
                     </div>
 
                     <div class="d-flex align-items-center gap-3">
@@ -482,11 +489,14 @@
                                 </button>
                             </form>
                         }
+                        @if (!(User.IsInRole("PlatformSuperAdmin") || User.IsInRole("SuperAdmin")) || Context.Request.Cookies.ContainsKey("crm_platform_workspace_access"))
+                        {
                         <!-- Quick Action: Create Lead -->
                         <a asp-controller="Leads" asp-action="Create" class="btn btn-sm btn-primary d-flex align-items-center gap-1 shadow-sm px-3">
                             <i class="bi bi-plus-lg"></i>
                             <span class="d-none d-sm-inline">New Lead</span>
                         </a>
+                        }
 
                         <!-- User Profile Dropdown -->
                         <div class="dropdown">
