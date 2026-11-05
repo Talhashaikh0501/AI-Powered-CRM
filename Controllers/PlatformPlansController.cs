@@ -1,9 +1,11 @@
 using System;
 using System.Linq;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models.Entities;
+using AI_Powered_CRM.Services.Interfaces;
 using AI_Powered_CRM.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,8 +17,15 @@ namespace AI_Powered_CRM.Controllers
     public class PlatformPlansController : Controller
     {
         private readonly ApplicationDbContext _db;
+        private readonly IAuditService _auditService;
 
-        public PlatformPlansController(ApplicationDbContext db) => _db = db;
+        public PlatformPlansController(ApplicationDbContext db, IAuditService auditService)
+        {
+            _db = db;
+            _auditService = auditService;
+        }
+
+        private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "PlatformSuperAdmin";
 
         [HttpGet]
         public async Task<IActionResult> Index()
@@ -64,6 +73,7 @@ namespace AI_Powered_CRM.Controllers
             plan.UpdatedAt = DateTime.UtcNow;
             _db.SubscriptionPlans.Add(plan);
             await _db.SaveChangesAsync();
+            await _auditService.LogAsync(GetUserId(), "SubscriptionPlan", plan.PlanId.ToString(), "SubscriptionPlanCreated", new { plan.Code, plan.Name, plan.MonthlyPriceInr, plan.YearlyPriceInr }, true);
             TempData["SuccessMessage"] = $"Plan '{plan.Name}' created.";
             return RedirectToAction(nameof(Index));
         }
@@ -106,6 +116,11 @@ namespace AI_Powered_CRM.Controllers
             if (plan == null) return NotFound();
 
             var code = NormalizeCode(model.Code);
+            if (code != plan.Code && await _db.Tenants.AnyAsync(t => t.SubscriptionPlanId == plan.PlanId))
+            {
+                ModelState.AddModelError(nameof(model.Code), "The code cannot be changed while companies are assigned to this plan.");
+                return View(model);
+            }
             if (await _db.SubscriptionPlans.AnyAsync(p => p.PlanId != plan.PlanId && p.Code == code))
             {
                 ModelState.AddModelError(nameof(model.Code), "This plan code already exists.");
@@ -127,6 +142,7 @@ namespace AI_Powered_CRM.Controllers
             }
 
             await _db.SaveChangesAsync();
+            await _auditService.LogAsync(GetUserId(), "SubscriptionPlan", plan.PlanId.ToString(), "SubscriptionPlanUpdated", new { plan.Code, plan.Name, plan.MonthlyPriceInr, plan.YearlyPriceInr, plan.MaxUserSeats, plan.MaxLeadsQuota, plan.MonthlyAiRequestLimit, AssignedCompanies = assignedTenants.Count }, true);
             TempData["SuccessMessage"] = $"Plan '{plan.Name}' updated. {assignedTenants.Count} assigned workspace(s) synchronized.";
             return RedirectToAction(nameof(Index));
         }
@@ -142,6 +158,7 @@ namespace AI_Powered_CRM.Controllers
             plan.IsPublic = false;
             plan.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+            await _auditService.LogAsync(GetUserId(), "SubscriptionPlan", plan.PlanId.ToString(), "SubscriptionPlanArchived", new { plan.Code, plan.Name }, true);
             TempData["SuccessMessage"] = $"Plan '{plan.Name}' archived. Existing assigned companies retain their plan.";
             return RedirectToAction(nameof(Index));
         }
@@ -168,6 +185,7 @@ namespace AI_Powered_CRM.Controllers
             }
 
             await _db.SaveChangesAsync();
+            await _auditService.LogAsync(GetUserId(), "SubscriptionPlan", id.ToString(), plan.IsActive ? "SubscriptionPlanArchivedInsteadOfDeleted" : "SubscriptionPlanDeleted", new { plan.Code, plan.Name }, true);
             return RedirectToAction(nameof(Index));
         }
 
