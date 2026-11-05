@@ -28,31 +28,44 @@ namespace AI_Powered_CRM.Controllers
             if (string.IsNullOrWhiteSpace(userId) || _context.CurrentTenantId == Guid.Empty)
                 return Forbid();
 
-            // The active workspace membership is the source of truth for the user's CRM role.
-            var membership = await _context.TenantMemberships
-                .IgnoreQueryFilters()
-                .AsNoTracking()
-                .Include(m => m.Tenant)
-                .FirstOrDefaultAsync(m =>
-                    m.UserId == userId &&
-                    m.TenantId == _context.CurrentTenantId &&
-                    m.IsActive &&
-                    m.Tenant != null &&
-                    m.Tenant.IsActive);
-
-            if (membership == null)
-                return Forbid();
-
-            var role = membership.CompanyRole switch
+            // A platform SuperAdmin may view a company dashboard only inside the
+            // explicit, time-limited, audited workspace session established by middleware.
+            string role;
+            if (_context.IsPlatformSuperAdmin)
             {
-                CompanyRole.CompanyAdmin => "Admin",
-                CompanyRole.Manager => "Manager",
-                CompanyRole.SalesExecutive => "SalesExecutive",
-                _ => "Unknown"
-            };
+                if (!_context.IsTenantResolved)
+                    return Forbid();
 
-            if (role == "Unknown")
-                return Forbid();
+                role = "Admin";
+            }
+            else
+            {
+                // The active workspace membership is the source of truth for ordinary CRM users.
+                var membership = await _context.TenantMemberships
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Include(m => m.Tenant)
+                    .FirstOrDefaultAsync(m =>
+                        m.UserId == userId &&
+                        m.TenantId == _context.CurrentTenantId &&
+                        m.IsActive &&
+                        m.Tenant != null &&
+                        m.Tenant.IsActive);
+
+                if (membership == null)
+                    return Forbid();
+
+                role = membership.CompanyRole switch
+                {
+                    CompanyRole.CompanyAdmin => "Admin",
+                    CompanyRole.Manager => "Manager",
+                    CompanyRole.SalesExecutive => "SalesExecutive",
+                    _ => "Unknown"
+                };
+
+                if (role == "Unknown")
+                    return Forbid();
+            }
 
             var userName = User.Identity?.Name ?? "User";
             var summary = await _reportService.GetDashboardSummaryAsync(userId, role);
