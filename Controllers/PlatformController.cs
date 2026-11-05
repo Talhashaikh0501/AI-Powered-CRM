@@ -410,7 +410,8 @@ namespace AI_Powered_CRM.Controllers
                     tenant.MaxUserSeats = selectedPlan.MaxUserSeats;
                     tenant.MaxLeadsQuota = selectedPlan.MaxLeadsQuota;
                     tenant.MonthlyAiRequestLimit = selectedPlan.MonthlyAiRequestLimit;
-                    tenant.SubscriptionTier = selectedPlan.Code == "starter" ? SubscriptionTier.Starter
+                    tenant.SubscriptionTier = selectedPlan.Code == "free-trial" ? SubscriptionTier.FreeTrial
+                        : selectedPlan.Code == "starter" ? SubscriptionTier.Starter
                         : selectedPlan.Code == "professional" ? SubscriptionTier.Professional
                         : selectedPlan.Code == "enterprise" ? SubscriptionTier.Enterprise
                         : SubscriptionTier.Custom;
@@ -436,20 +437,20 @@ namespace AI_Powered_CRM.Controllers
                     OldStatus = oldStatus.ToString(),
                     NewStatus = model.SubscriptionStatus.ToString(),
                     OldSeats = oldSeats,
-                    NewSeats = model.MaxUserSeats,
+                    NewSeats = tenant.MaxUserSeats,
                     OldLeadsQuota = oldLeads,
-                    NewLeadsQuota = model.MaxLeadsQuota,
+                    NewLeadsQuota = tenant.MaxLeadsQuota,
                     OldAiLimit = oldAiLimit,
-                    NewAiLimit = model.MonthlyAiRequestLimit,
+                    NewAiLimit = tenant.MonthlyAiRequestLimit,
                     OldTrialEndsAt = oldTrialEndsAt,
-                    NewTrialEndsAt = model.TrialEndsAt,
+                    NewTrialEndsAt = tenant.TrialEndsAt,
                     OldSubscriptionRenewsAt = oldRenewsAt,
                     NewSubscriptionRenewsAt = model.SubscriptionRenewsAt,
                     Reason = model.Reason ?? "Administrative subscription and quota adjustment"
                 });
 
                 _logger.LogInformation("SuperAdmin {UserId} updated tenant plan for {TenantId}: Tier {OldTier}->{NewTier}, Seats {OldSeats}->{NewSeats}",
-                    GetUserId(), tenant.TenantId, oldTier, model.SubscriptionTier, oldSeats, model.MaxUserSeats);
+                    GetUserId(), tenant.TenantId, oldTier, tenant.SubscriptionTier, oldSeats, tenant.MaxUserSeats);
 
                 TempData["SuccessMessage"] = $"Subscription plan and quotas for '{tenant.CompanyName}' updated successfully.";
                 return RedirectToAction(nameof(TenantDetails), new { id = model.TenantId });
