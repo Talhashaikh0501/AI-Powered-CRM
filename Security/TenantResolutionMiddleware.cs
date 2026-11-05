@@ -32,7 +32,7 @@ namespace AI_Powered_CRM.Security
             _logger = logger;
         }
 
-        public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext, ApplicationDbContext dbContext, IDataProtectionProvider dataProtectionProvider)
+        public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext, ApplicationDbContext dbContext, IDataProtectionProvider? dataProtectionProvider = null)
         {
             // 1. Unauthenticated requests: NEVER resolve tenant context
             if (context.User?.Identity?.IsAuthenticated != true)
@@ -74,7 +74,7 @@ namespace AI_Powered_CRM.Security
             // The short-lived, Data-Protection-protected cookie cannot be forged by changing its contents.
             string? ownerWorkspaceReason = null;
             bool isOwnerWorkspaceSession = false;
-            if (isSuperAdmin && !isFromHeader &&
+            if (isSuperAdmin && dataProtectionProvider != null && !isFromHeader &&
                 context.Request.Cookies.TryGetValue(PlatformWorkspaceCookieName, out var protectedWorkspace))
             {
                 try
