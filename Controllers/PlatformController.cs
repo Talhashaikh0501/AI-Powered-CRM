@@ -7,8 +7,10 @@ using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models.Entities;
 using AI_Powered_CRM.Models.Enums;
 using AI_Powered_CRM.Services.Interfaces;
+using AI_Powered_CRM.Security;
 using AI_Powered_CRM.ViewModels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -22,17 +24,20 @@ namespace AI_Powered_CRM.Controllers
         private readonly ISupportAccessService _supportAccessService;
         private readonly IAuditService _auditService;
         private readonly ILogger<PlatformController> _logger;
+        private readonly IDataProtectionProvider _dataProtectionProvider;
 
         public PlatformController(
             ApplicationDbContext context,
             ISupportAccessService supportAccessService,
             IAuditService auditService,
-            ILogger<PlatformController> logger)
+            ILogger<PlatformController> logger,
+            IDataProtectionProvider dataProtectionProvider)
         {
             _context = context;
             _supportAccessService = supportAccessService;
             _auditService = auditService;
             _logger = logger;
+            _dataProtectionProvider = dataProtectionProvider;
         }
 
         private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "SuperAdmin";
@@ -329,6 +334,70 @@ namespace AI_Powered_CRM.Controllers
             {
                 _context.IgnoreTenantFilter = previousIgnore;
             }
+        }
+
+        // POST: /Platform/EnterWorkspace
+        // Explicit, time-limited platform-owner access. The middleware validates the protected cookie
+        // and writes a permanent tenant audit entry before allowing CRM requests.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EnterWorkspace(Guid tenantId, string? reason)
+        {
+            if (tenantId == Guid.Empty || string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 8 || reason.Trim().Length > 500)
+            {
+                TempData["ErrorMessage"] = "Select a company and provide an access reason of 8–500 characters.";
+                return RedirectToAction(nameof(TenantDetails), new { id = tenantId });
+            }
+
+            var previousIgnore = _context.IgnoreTenantFilter;
+            try
+            {
+                _context.IgnoreTenantFilter = true;
+                var tenant = await _context.Tenants
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.IsActive);
+
+                if (tenant == null)
+                {
+                    TempData["ErrorMessage"] = "The company does not exist or is currently inactive.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                var expiresAt = DateTime.UtcNow.AddMinutes(60);
+                var payload = $"{tenant.TenantId:N}|{expiresAt.Ticks}|{Uri.EscapeDataString(reason.Trim())}";
+                var protector = _dataProtectionProvider.CreateProtector("AI_Powered_CRM.PlatformWorkspaceAccess.v1");
+                var protectedPayload = protector.Protect(payload);
+
+                Response.Cookies.Append(TenantResolutionMiddleware.PlatformWorkspaceCookieName, protectedPayload, new Microsoft.AspNetCore.Http.CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = Request.IsHttps,
+                    SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
+                    IsEssential = true,
+                    Expires = new DateTimeOffset(expiresAt)
+                });
+
+                _logger.LogWarning("Platform SuperAdmin {UserId} entered company workspace {TenantId} ({CompanyName}). Reason: {Reason}",
+                    GetUserId(), tenant.TenantId, tenant.CompanyName, reason.Trim());
+
+                TempData["SuccessMessage"] = $"You are entering {tenant.CompanyName}'s workspace. Access expires in 60 minutes and is audited.";
+                return RedirectToAction("Index", "Dashboard");
+            }
+            finally
+            {
+                _context.IgnoreTenantFilter = previousIgnore;
+            }
+        }
+
+        // POST: /Platform/ExitWorkspace
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult ExitWorkspace()
+        {
+            Response.Cookies.Delete(TenantResolutionMiddleware.PlatformWorkspaceCookieName);
+            Response.Cookies.Delete(TenantResolutionMiddleware.ActiveTenantCookieName);
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: /Platform/Support
