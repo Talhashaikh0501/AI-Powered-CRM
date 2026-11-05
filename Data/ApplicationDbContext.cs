@@ -30,6 +30,7 @@ namespace AI_Powered_CRM.Data
 
         // Multi-Tenant Core Tables
         public DbSet<Tenant> Tenants => Set<Tenant>();
+        public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
         public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
         public DbSet<TenantSetting> TenantSettings => Set<TenantSetting>();
         public DbSet<TenantInvitation> TenantInvitations => Set<TenantInvitation>();
@@ -70,9 +71,27 @@ namespace AI_Powered_CRM.Data
                 entity.Property(e => e.SubscriptionTier).HasConversion<string>().HasMaxLength(30);
                 entity.Property(e => e.SubscriptionStatus).HasConversion<string>().HasMaxLength(30);
 
+                entity.HasOne(e => e.SubscriptionPlan)
+                      .WithMany(p => p.Tenants)
+                      .HasForeignKey(e => e.SubscriptionPlanId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
                 entity.HasIndex(e => e.Slug)
                       .IsUnique()
                       .HasDatabaseName("IX_TalhaCRM_Tenants_Slug");
+            });
+
+            builder.Entity<SubscriptionPlan>(entity =>
+            {
+                entity.ToTable("TalhaCRM_SubscriptionPlans");
+                entity.HasKey(e => e.PlanId);
+                entity.Property(e => e.Code).HasMaxLength(60).IsRequired();
+                entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+                entity.Property(e => e.Tagline).HasMaxLength(300);
+                entity.Property(e => e.MonthlyPriceInr).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.YearlyPriceInr).HasColumnType("decimal(18,2)");
+                entity.HasIndex(e => e.Code).IsUnique()
+                    .HasDatabaseName("IX_TalhaCRM_SubscriptionPlans_Code");
             });
 
             builder.Entity<TenantMembership>(entity =>
