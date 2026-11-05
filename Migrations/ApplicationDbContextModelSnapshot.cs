@@ -525,6 +525,9 @@ namespace AI_Powered_CRM.Migrations
                     b.Property<int>("MonthlyAiRequestLimit")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("SubscriptionPlanId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Phone")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
@@ -555,11 +558,38 @@ namespace AI_Powered_CRM.Migrations
 
                     b.HasKey("TenantId");
 
+                    b.HasIndex("SubscriptionPlanId");
+
                     b.HasIndex("Slug")
                         .IsUnique()
                         .HasDatabaseName("IX_TalhaCRM_Tenants_Slug");
 
                     b.ToTable("TalhaCRM_Tenants", (string)null);
+                });
+
+            modelBuilder.Entity("AI_Powered_CRM.Models.Entities.SubscriptionPlan", b =>
+                {
+                    b.Property<Guid>("PlanId").ValueGeneratedOnAdd().HasColumnType("uniqueidentifier");
+                    b.Property<string>("Code").IsRequired().HasMaxLength(60).HasColumnType("nvarchar(60)");
+                    b.Property<DateTime>("CreatedAt").HasColumnType("datetime2");
+                    b.Property<string>("HighlightsJson").IsRequired().HasColumnType("nvarchar(max)");
+                    b.Property<bool>("IsActive").HasColumnType("bit");
+                    b.Property<bool>("IsPublic").HasColumnType("bit");
+                    b.Property<bool>("IsRecommended").HasColumnType("bit");
+                    b.Property<string>("IncludedFeaturesJson").IsRequired().HasColumnType("nvarchar(max)");
+                    b.Property<int>("MaxLeadsQuota").HasColumnType("int");
+                    b.Property<int>("MaxUserSeats").HasColumnType("int");
+                    b.Property<decimal>("MonthlyPriceInr").HasColumnType("decimal(18,2)");
+                    b.Property<int>("MonthlyAiRequestLimit").HasColumnType("int");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(120).HasColumnType("nvarchar(120)");
+                    b.Property<int>("SortOrder").HasColumnType("int");
+                    b.Property<string>("Tagline").IsRequired().HasMaxLength(300).HasColumnType("nvarchar(300)");
+                    b.Property<int>("TrialDays").HasColumnType("int");
+                    b.Property<DateTime>("UpdatedAt").HasColumnType("datetime2");
+                    b.Property<decimal>("YearlyPriceInr").HasColumnType("decimal(18,2)");
+                    b.HasKey("PlanId");
+                    b.HasIndex("Code").IsUnique().HasDatabaseName("IX_TalhaCRM_SubscriptionPlans_Code");
+                    b.ToTable("TalhaCRM_SubscriptionPlans", (string)null);
                 });
 
             modelBuilder.Entity("AI_Powered_CRM.Models.Entities.TenantInvitation", b =>
@@ -650,6 +680,15 @@ namespace AI_Powered_CRM.Migrations
                         .HasDatabaseName("IX_TalhaCRM_TenantMemberships_TenantId_UserId");
 
                     b.ToTable("TalhaCRM_TenantMemberships", (string)null);
+                });
+
+            modelBuilder.Entity("AI_Powered_CRM.Models.Entities.Tenant", b =>
+                {
+                    b.HasOne("AI_Powered_CRM.Models.Entities.SubscriptionPlan", "SubscriptionPlan")
+                        .WithMany("Tenants")
+                        .HasForeignKey("SubscriptionPlanId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                    b.Navigation("SubscriptionPlan");
                 });
 
             modelBuilder.Entity("AI_Powered_CRM.Models.Entities.TenantSetting", b =>
@@ -1212,10 +1251,14 @@ namespace AI_Powered_CRM.Migrations
             modelBuilder.Entity("AI_Powered_CRM.Models.Entities.Tenant", b =>
                 {
                     b.Navigation("Leads");
-
                     b.Navigation("Memberships");
-
                     b.Navigation("Settings");
+                    b.Navigation("SubscriptionPlan");
+                });
+
+            modelBuilder.Entity("AI_Powered_CRM.Models.Entities.SubscriptionPlan", b =>
+                {
+                    b.Navigation("Tenants");
                 });
 #pragma warning restore 612, 618
         }

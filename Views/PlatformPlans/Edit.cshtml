@@ -1,0 +1,34 @@
+@model AI_Powered_CRM.ViewModels.ManageSubscriptionPlanViewModel
+@{
+    ViewData["Title"] = Model.PlanId.HasValue ? "Edit Subscription Plan" : "Create Subscription Plan";
+    var isEdit = Model.PlanId.HasValue;
+}
+<div class="mb-4"><a asp-action="Index" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Back to plans</a><h3 class="fw-bold mt-2">@ViewData["Title"]</h3><p class="text-muted small">Prices are in INR. Changes to quotas synchronize to companies assigned to this plan.</p></div>
+<div class="crm-card p-4">
+<form asp-action="@(isEdit ? "Edit" : "Create")" method="post">
+@Html.AntiForgeryToken()
+<input asp-for="PlanId" type="hidden" />
+<div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="Name" class="form-label">Plan name</label><input asp-for="Name" class="form-control" /><span asp-validation-for="Name" class="text-danger small"></span></div>
+<div class="col-md-4"><label asp-for="Code" class="form-label">Unique code</label>
+@if (isEdit) { <input asp-for="Code" class="form-control bg-light" readonly /> } else { <input asp-for="Code" class="form-control" /> }
+<span asp-validation-for="Code" class="text-danger small"></span></div>
+<div class="col-md-4"><label asp-for="SortOrder" class="form-label">Display order</label><input asp-for="SortOrder" class="form-control" type="number" /></div>
+<div class="col-12"><label asp-for="Tagline" class="form-label">Tagline</label><input asp-for="Tagline" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="MonthlyPriceInr" class="form-label">Monthly price (₹)</label><input asp-for="MonthlyPriceInr" class="form-control" type="number" min="0" step="0.01" /></div>
+<div class="col-md-3"><label asp-for="YearlyPriceInr" class="form-label">Annual price (₹)</label><input asp-for="YearlyPriceInr" class="form-control" type="number" min="0" step="0.01" /></div>
+<div class="col-md-3"><label asp-for="TrialDays" class="form-label">Trial days</label><input asp-for="TrialDays" class="form-control" type="number" min="0" /></div>
+<div class="col-md-3"><label asp-for="MaxUserSeats" class="form-label">User seats</label><input asp-for="MaxUserSeats" class="form-control" type="number" min="1" /></div>
+<div class="col-md-4"><label asp-for="MaxLeadsQuota" class="form-label">Lead quota</label><input asp-for="MaxLeadsQuota" class="form-control" type="number" min="1" /></div>
+<div class="col-md-4"><label asp-for="MonthlyAiRequestLimit" class="form-label">AI requests / month</label><input asp-for="MonthlyAiRequestLimit" class="form-control" type="number" min="0" /></div>
+
+<div class="col-md-6"><label asp-for="Highlights" class="form-label">Highlights (one per line)</label><textarea asp-for="Highlights" class="form-control" rows="5"></textarea></div>
+<div class="col-md-6"><label asp-for="IncludedFeatures" class="form-label">Included features (one per line)</label><textarea asp-for="IncludedFeatures" class="form-control" rows="5"></textarea></div>
+<div class="col-12 d-flex flex-wrap gap-4">
+<div class="form-check"><input asp-for="IsRecommended" class="form-check-input" /><label asp-for="IsRecommended" class="form-check-label">Recommended</label></div>
+<div class="form-check"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label">Active</label></div>
+<div class="form-check"><input asp-for="IsPublic" class="form-check-input" /><label asp-for="IsPublic" class="form-check-label">Show on public pricing page</label></div>
+</div>
+<div class="col-12 d-flex gap-2 mt-3"><button type="submit" class="btn btn-primary">Save Plan</button><a asp-action="Index" class="btn btn-outline-secondary">Cancel</a></div>
+</div></form></div>

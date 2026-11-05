@@ -30,6 +30,7 @@ namespace AI_Powered_CRM.ViewModels
         public string Slug { get; set; } = string.Empty;
         public string ContactEmail { get; set; } = string.Empty;
         public SubscriptionTier Tier { get; set; }
+        public Guid? CurrentPlanId { get; set; }
         public SubscriptionStatus Status { get; set; }
         public int ActiveSeats { get; set; }
         public int MaxUserSeats { get; set; }
@@ -48,6 +49,7 @@ namespace AI_Powered_CRM.ViewModels
         public string? Phone { get; set; }
         public string DefaultCurrency { get; set; } = "INR";
         public SubscriptionTier Tier { get; set; }
+        public Guid? CurrentPlanId { get; set; }
         public SubscriptionStatus Status { get; set; }
         public DateTime? TrialEndsAt { get; set; }
         public DateTime? SubscriptionRenewsAt { get; set; }
@@ -99,6 +101,8 @@ namespace AI_Powered_CRM.ViewModels
         public Guid TenantId { get; set; }
 
         public string CompanyName { get; set; } = string.Empty;
+
+        public Guid? SubscriptionPlanId { get; set; }
 
         [Required]
         public SubscriptionTier SubscriptionTier { get; set; }

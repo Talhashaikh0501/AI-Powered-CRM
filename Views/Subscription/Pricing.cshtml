@@ -12,7 +12,7 @@
         </span>
         <h1 class="fw-bold text-dark mb-3 display-6">Scale Your Sales with AI Intelligence</h1>
         <p class="text-muted lead fs-6 mx-auto" style="max-width: 650px;">
-            Choose a flexible tier tailored for your team size. All plans include Indian Rupee (₹) billing, multi-tenant security isolation, and Groq-accelerated AI scoring.
+            Choose a flexible tier tailored for your team size. All displayed prices, trial periods, and quotas are maintained by the platform administrator.
         </p>
 
         <!-- Monthly / Annual Toggle -->
@@ -22,7 +22,7 @@
                 <input class="form-check-input" type="checkbox" role="switch" id="billingCycleToggle" style="width: 2.75rem; height: 1.4rem; cursor: pointer;">
             </div>
             <span class="small fw-semibold text-dark pe-2" id="annualLabel">
-                Annual <span class="badge bg-success text-white rounded-pill ms-1">Save 20%</span>
+                Annual
             </span>
         </div>
     </div>
@@ -59,7 +59,7 @@
                                 <span class="text-muted small">/ month</span>
                             </div>
                             <div class="text-muted small mt-1 price-annual d-none">
-                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : "Free 14-day evaluation")
+                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : (plan.TrialDays > 0 ? $"Free {plan.TrialDays}-day evaluation" : "Free plan"))
                             </div>
                             <div class="text-muted small mt-1 price-monthly">
                                 @(plan.MonthlyPriceInr > 0 ? "Billed on a monthly cycle" : "No credit card required")
@@ -111,7 +111,7 @@
                             {
                                 <button type="button" class="btn @(isRec ? "btn-primary shadow-sm" : "btn-outline-primary") w-100 py-2 fw-semibold"
                                         data-bs-toggle="modal" data-bs-target="#paymentComingSoonModal">
-                                    @(plan.Tier == SubscriptionTier.FreeTrial ? "Start Free Trial" : "Select " + plan.Name)
+                                    @(plan.TrialDays > 0 ? "Start Free Trial" : (plan.IsFree ? "Select Free Plan" : "Select " + plan.Name))
                                 </button>
                             }
                         </div>
@@ -125,105 +125,22 @@
     <div class="crm-card p-4 p-md-5 mb-5 overflow-hidden">
         <div class="text-center mb-4">
             <h4 class="fw-bold text-dark mb-1">Detailed Plan Comparison</h4>
-            <p class="text-muted small">Everything you need to evaluate capabilities across all subscription tiers.</p>
+            <p class="text-muted small">Live comparison generated from the current platform plan catalogue.</p>
         </div>
-
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
                 <thead class="table-light text-uppercase text-muted" style="font-size: 0.72rem;">
-                    <tr>
-                        <th class="ps-4" style="width: 36%;">Feature Capability</th>
-                        <th class="text-center" style="width: 16%;">Free Trial</th>
-                        <th class="text-center" style="width: 16%;">Starter</th>
-                        <th class="text-center bg-primary bg-opacity-10 text-primary" style="width: 16%;">Professional</th>
-                        <th class="text-center" style="width: 16%;">Enterprise</th>
+                    <tr><th class="ps-4">Plan capability</th>
+                    @foreach (var plan in Model.Plans) { <th class="text-center">@plan.Name</th> }
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">User Seats Allowed</td>
-                        <td class="text-center text-muted">5 Seats</td>
-                        <td class="text-center text-muted">10 Seats</td>
-                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">25 Seats</td>
-                        <td class="text-center text-muted">100+ Seats</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Active Lead Quota</td>
-                        <td class="text-center text-muted">1,000</td>
-                        <td class="text-center text-muted">5,000</td>
-                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">25,000</td>
-                        <td class="text-center text-muted">100,000+</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Groq AI Scoring Credits / mo</td>
-                        <td class="text-center text-muted">200</td>
-                        <td class="text-center text-muted">1,000</td>
-                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">5,000</td>
-                        <td class="text-center text-muted">25,000</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">AI Win Probability & Risk Detection</td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Follow-up Task Reminders & Queues</td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Conversion Pipeline Analytics</td>
-                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Zero-Data-Leakage Tenant Isolation</td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Role-Based Access Control (Admin, Manager, Rep)</td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Lead Export Admin Protection</td>
-                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
-                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
-                        <td class="text-center text-success bg-primary bg-opacity-10"><i class="bi bi-check-circle-fill"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Security Audit Trail Retention</td>
-                        <td class="text-center text-muted">7 Days</td>
-                        <td class="text-center text-muted">30 Days</td>
-                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">90 Days</td>
-                        <td class="text-center text-muted">Unlimited</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Support Access Ticketing (Anti-Self-Approval)</td>
-                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
-                        <td class="text-center text-muted"><i class="bi bi-dash"></i></td>
-                        <td class="text-center text-muted bg-primary bg-opacity-10"><i class="bi bi-dash"></i></td>
-                        <td class="text-center text-success"><i class="bi bi-check-circle-fill"></i></td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 fw-semibold text-dark">Support Response SLA</td>
-                        <td class="text-center text-muted">Community</td>
-                        <td class="text-center text-muted">24 Hours</td>
-                        <td class="text-center fw-bold text-primary bg-primary bg-opacity-10">4 Hours</td>
-                        <td class="text-center text-muted">1 Hour (24/7)</td>
-                    </tr>
+                    <tr><td class="ps-4 fw-semibold">Monthly price</td>@foreach (var plan in Model.Plans) { <td class="text-center">@plan.MonthlyPriceDisplay</td> }</tr>
+                    <tr><td class="ps-4 fw-semibold">Annual price</td>@foreach (var plan in Model.Plans) { <td class="text-center">@plan.YearlyPriceDisplay</td> }</tr>
+                    <tr><td class="ps-4 fw-semibold">Trial days</td>@foreach (var plan in Model.Plans) { <td class="text-center">@plan.TrialDays</td> }</tr>
+                    <tr><td class="ps-4 fw-semibold">User seats</td>@foreach (var plan in Model.Plans) { <td class="text-center">@plan.MaxUserSeats.ToString("N0")</td> }</tr>
+                    <tr><td class="ps-4 fw-semibold">Lead quota</td>@foreach (var plan in Model.Plans) { <td class="text-center">@plan.MaxLeadsQuota.ToString("N0")</td> }</tr>
+                    <tr><td class="ps-4 fw-semibold">AI requests / month</td>@foreach (var plan in Model.Plans) { <td class="text-center">@plan.MonthlyAiRequestLimit.ToString("N0")</td> }</tr>
                 </tbody>
             </table>
         </div>
@@ -254,7 +171,7 @@
                 <div class="accordion-item border-bottom">
                     <h2 class="accordion-header" id="faqTwo">
                         <button class="accordion-button collapsed fw-semibold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
-                            What happens when my 14-day free trial ends?
+                            What happens when my free trial ends?
                         </button>
                     </h2>
                     <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="faqTwo" data-bs-parent="#pricingFaqAccordion">

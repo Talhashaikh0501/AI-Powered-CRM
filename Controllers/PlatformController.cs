@@ -154,7 +154,7 @@ namespace AI_Powered_CRM.Controllers
                     query = query.Where(t => t.IsActive == activeOnly.Value);
                 }
 
-                var allTenants = await _context.Tenants.AsNoTracking().ToListAsync();
+                var allTenants = await _context.Tenants.AsNoTracking().Include(t => t.SubscriptionPlan).ToListAsync();
                 var filteredTenants = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
 
                 var memberships = await _context.TenantMemberships
@@ -168,14 +168,10 @@ namespace AI_Powered_CRM.Controllers
 
                 var totalAiCalls = allTenants.Sum(t => t.CurrentMonthAiUsageCount);
 
-                // Estimated MRR based on active commercial tiers (Starter: ₹1,499, Pro: ₹3,999, Enterprise: ₹8,999)
-                decimal estimatedMrr = allTenants.Where(t => t.IsActive && t.SubscriptionStatus == SubscriptionStatus.Active).Sum(t => t.SubscriptionTier switch
-                {
-                    SubscriptionTier.Starter => 1499m,
-                    SubscriptionTier.Professional => 3999m,
-                    SubscriptionTier.Enterprise => 8999m,
-                    _ => 0m
-                });
+                // Estimate MRR from the current database-backed plan price.
+                decimal estimatedMrr = allTenants
+                    .Where(t => t.IsActive && t.SubscriptionStatus == SubscriptionStatus.Active)
+                    .Sum(t => t.SubscriptionPlan?.MonthlyPriceInr ?? 0m);
 
                 var tierDistribution = new Dictionary<SubscriptionTier, int>();
                 foreach (var tEnum in Enum.GetValues<SubscriptionTier>())
@@ -233,6 +229,7 @@ namespace AI_Powered_CRM.Controllers
 
                 var tenant = await _context.Tenants
                     .Include(t => t.Settings)
+                    .Include(t => t.SubscriptionPlan)
                     .AsNoTracking()
                     .FirstOrDefaultAsync(t => t.TenantId == id);
 
@@ -265,6 +262,9 @@ namespace AI_Powered_CRM.Controllers
                     })
                     .ToListAsync();
 
+                ViewBag.SubscriptionPlans = await _context.SubscriptionPlans.AsNoTracking()
+                    .Where(p => p.IsActive).OrderBy(p => p.SortOrder).ToListAsync();
+
                 var vm = new PlatformTenantDetailsViewModel
                 {
                     TenantId = tenant.TenantId,
@@ -274,6 +274,7 @@ namespace AI_Powered_CRM.Controllers
                     Phone = tenant.Phone,
                     DefaultCurrency = tenant.DefaultCurrency,
                     Tier = tenant.SubscriptionTier,
+                    CurrentPlanId = tenant.SubscriptionPlanId,
                     Status = tenant.SubscriptionStatus,
                     TrialEndsAt = tenant.TrialEndsAt,
                     SubscriptionRenewsAt = tenant.SubscriptionRenewsAt,
@@ -380,6 +381,7 @@ namespace AI_Powered_CRM.Controllers
                 }
 
                 var oldTier = tenant.SubscriptionTier;
+                var oldPlanId = tenant.SubscriptionPlanId;
                 var oldStatus = tenant.SubscriptionStatus;
                 var oldSeats = tenant.MaxUserSeats;
                 var oldLeads = tenant.MaxLeadsQuota;
@@ -393,6 +395,34 @@ namespace AI_Powered_CRM.Controllers
                 tenant.MaxLeadsQuota = model.MaxLeadsQuota;
                 tenant.MonthlyAiRequestLimit = model.MonthlyAiRequestLimit;
                 tenant.TrialEndsAt = model.TrialEndsAt;
+
+                if (model.SubscriptionPlanId.HasValue)
+                {
+                    var selectedPlan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p =>
+                        p.PlanId == model.SubscriptionPlanId.Value && p.IsActive);
+                    if (selectedPlan == null)
+                    {
+                        TempData["ErrorMessage"] = "The selected subscription plan is unavailable or archived.";
+                        return RedirectToAction(nameof(TenantDetails), new { id = model.TenantId });
+                    }
+
+                    tenant.SubscriptionPlanId = selectedPlan.PlanId;
+                    tenant.MaxUserSeats = selectedPlan.MaxUserSeats;
+                    tenant.MaxLeadsQuota = selectedPlan.MaxLeadsQuota;
+                    tenant.MonthlyAiRequestLimit = selectedPlan.MonthlyAiRequestLimit;
+                    tenant.SubscriptionTier = selectedPlan.Code == "free-trial" ? SubscriptionTier.FreeTrial
+                        : selectedPlan.Code == "starter" ? SubscriptionTier.Starter
+                        : selectedPlan.Code == "professional" ? SubscriptionTier.Professional
+                        : selectedPlan.Code == "enterprise" ? SubscriptionTier.Enterprise
+                        : SubscriptionTier.Custom;
+                    tenant.TrialEndsAt = selectedPlan.TrialDays > 0
+                        ? DateTime.UtcNow.AddDays(selectedPlan.TrialDays)
+                        : null;
+                }
+                else
+                {
+                    tenant.SubscriptionPlanId = null;
+                }
                 tenant.SubscriptionRenewsAt = model.SubscriptionRenewsAt;
                 tenant.UpdatedAt = DateTime.UtcNow;
 
@@ -401,24 +431,26 @@ namespace AI_Powered_CRM.Controllers
                 await _auditService.LogAsync(GetUserId(), "Tenant", tenant.TenantId.ToString(), "TenantPlanUpdatedBySuperAdmin", new
                 {
                     OldTier = oldTier.ToString(),
-                    NewTier = model.SubscriptionTier.ToString(),
+                    NewTier = tenant.SubscriptionTier.ToString(),
+                    OldPlanId = oldPlanId,
+                    NewPlanId = tenant.SubscriptionPlanId,
                     OldStatus = oldStatus.ToString(),
                     NewStatus = model.SubscriptionStatus.ToString(),
                     OldSeats = oldSeats,
-                    NewSeats = model.MaxUserSeats,
+                    NewSeats = tenant.MaxUserSeats,
                     OldLeadsQuota = oldLeads,
-                    NewLeadsQuota = model.MaxLeadsQuota,
+                    NewLeadsQuota = tenant.MaxLeadsQuota,
                     OldAiLimit = oldAiLimit,
-                    NewAiLimit = model.MonthlyAiRequestLimit,
+                    NewAiLimit = tenant.MonthlyAiRequestLimit,
                     OldTrialEndsAt = oldTrialEndsAt,
-                    NewTrialEndsAt = model.TrialEndsAt,
+                    NewTrialEndsAt = tenant.TrialEndsAt,
                     OldSubscriptionRenewsAt = oldRenewsAt,
                     NewSubscriptionRenewsAt = model.SubscriptionRenewsAt,
                     Reason = model.Reason ?? "Administrative subscription and quota adjustment"
                 });
 
                 _logger.LogInformation("SuperAdmin {UserId} updated tenant plan for {TenantId}: Tier {OldTier}->{NewTier}, Seats {OldSeats}->{NewSeats}",
-                    GetUserId(), tenant.TenantId, oldTier, model.SubscriptionTier, oldSeats, model.MaxUserSeats);
+                    GetUserId(), tenant.TenantId, oldTier, tenant.SubscriptionTier, oldSeats, tenant.MaxUserSeats);
 
                 TempData["SuccessMessage"] = $"Subscription plan and quotas for '{tenant.CompanyName}' updated successfully.";
                 return RedirectToAction(nameof(TenantDetails), new { id = model.TenantId });

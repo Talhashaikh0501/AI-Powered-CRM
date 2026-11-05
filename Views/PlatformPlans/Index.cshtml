@@ -1,0 +1,32 @@
+@model AI_Powered_CRM.ViewModels.SubscriptionPlanManagementViewModel
+@{
+    ViewData["Title"] = "Subscription Plan Management";
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-1">Subscription Plans</h3>
+        <p class="text-muted small mb-0">Manage the live pricing catalogue, trial settings, and workspace quotas.</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Add Plan</a>
+</div>
+@if (TempData["SuccessMessage"] != null) { <div class="alert alert-success">@TempData["SuccessMessage"]</div> }
+<div class="crm-card p-3 table-responsive">
+<table class="table table-hover align-middle mb-0">
+<thead><tr><th>Plan</th><th>Monthly</th><th>Annual</th><th>Limits</th><th>Companies</th><th>Visibility</th><th class="text-end">Actions</th></tr></thead>
+<tbody>
+@foreach (var p in Model.Plans)
+{
+<tr>
+<td><strong>@p.Name</strong><div class="small text-muted">@p.Code</div>@if(p.IsRecommended){<span class="badge bg-primary">Recommended</span>}</td>
+<td>₹@p.MonthlyPriceInr.ToString("N0")</td><td>₹@p.YearlyPriceInr.ToString("N0")</td>
+<td class="small">@p.MaxUserSeats seats · @p.MaxLeadsQuota.ToString("N0") leads · @p.MonthlyAiRequestLimit.ToString("N0") AI/mo</td>
+<td>@p.AssignedCompanies</td>
+<td><span class="badge @(p.IsActive ? "bg-success" : "bg-secondary")">@(p.IsActive ? "Active" : "Archived")</span> <span class="badge @(p.IsPublic ? "bg-info" : "bg-light text-dark")">@(p.IsPublic ? "Public" : "Hidden")</span></td>
+<td class="text-end text-nowrap">
+<a asp-action="Edit" asp-route-id="@p.PlanId" class="btn btn-sm btn-outline-primary">Edit</a>
+<form asp-action="Archive" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@p.PlanId" /><button class="btn btn-sm btn-outline-warning" type="submit" onclick="return confirm('Archive this plan? Existing companies will keep it.')">Archive</button></form>
+<form asp-action="Delete" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@p.PlanId" /><button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete this unused plan? Assigned plans will be archived instead.')">Remove</button></form>
+</td></tr>
+}
+@if (!Model.Plans.Any()) { <tr><td colspan="7" class="text-center text-muted py-4">No plans found. Run the subscription-plan migration to seed the existing catalogue.</td></tr> }
+</tbody></table></div>

@@ -1,3 +1,4 @@
+@using System.Collections.Generic
 @model AI_Powered_CRM.ViewModels.PlatformTenantDetailsViewModel
 @{
     ViewData["Title"] = $"Workspace Details - {Model.CompanyName}";
@@ -233,6 +234,21 @@
                 <div class="modal-body">
                     <div class="alert alert-info py-2 small mb-3">
                         <i class="bi bi-info-circle me-1"></i> Changes take effect immediately without billing transaction processing.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Subscription Plan</label>
+                        <select name="SubscriptionPlanId" class="form-select form-select-sm">
+                            <option value="">Custom quotas / legacy tier (no catalogue plan)</option>
+                            @if (ViewBag.SubscriptionPlans != null)
+                            {
+                                foreach (var plan in (IEnumerable<AI_Powered_CRM.Models.Entities.SubscriptionPlan>)ViewBag.SubscriptionPlans)
+                                {
+                                    <option value="@plan.PlanId" selected="@(Model.CurrentPlanId == plan.PlanId)">@plan.Name — ₹@plan.MonthlyPriceInr.ToString("N0") / month</option>
+                                }
+                            }
+                        </select>
+                        <small class="text-muted">Selecting a plan applies its current seat, lead, and AI quotas.</small>
                     </div>
 
                     <div class="mb-3">

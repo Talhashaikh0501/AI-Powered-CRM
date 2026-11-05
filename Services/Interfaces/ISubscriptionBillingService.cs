@@ -8,7 +8,7 @@ namespace AI_Powered_CRM.Services.Interfaces
 {
     public interface ISubscriptionBillingService
     {
-        List<SubscriptionPlanDto> GetAvailablePlans(SubscriptionTier? currentTier = null);
+        List<SubscriptionPlanDto> GetAvailablePlans(SubscriptionTier? currentTier = null, Guid? currentPlanId = null);
         Task<SubscriptionDashboardViewModel?> GetSubscriptionDashboardAsync(Guid tenantId);
         Task<BillingHistoryViewModel> GetBillingHistoryAsync(Guid tenantId);
     }

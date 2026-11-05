@@ -112,7 +112,11 @@ namespace AI_Powered_CRM.Services.Implementations
 
         private async Task<CompanyRegistrationResult> ExecuteRegistrationStepsAsync(RegisterCompanyViewModel model, string normalizedSlug, string normalizedEmail)
         {
-            // 1. Create Tenant
+            // 1. Resolve the active Free Trial plan from the platform catalogue.
+            var freeTrialPlan = await _db.SubscriptionPlans
+                .FirstOrDefaultAsync(p => p.Code == "free-trial" && p.IsActive);
+
+            // 2. Create Tenant
             var tenant = new Tenant
             {
                 TenantId = Guid.NewGuid(),
@@ -123,10 +127,11 @@ namespace AI_Powered_CRM.Services.Implementations
                 DefaultCurrency = "INR",
                 SubscriptionTier = SubscriptionTier.FreeTrial,
                 SubscriptionStatus = SubscriptionStatus.Trialing,
-                TrialEndsAt = DateTime.UtcNow.AddDays(14),
-                MaxUserSeats = 5,
-                MaxLeadsQuota = 1000,
-                MonthlyAiRequestLimit = 200,
+                MonthlyAiRequestLimit = freeTrialPlan?.MonthlyAiRequestLimit ?? 200,
+                SubscriptionPlanId = freeTrialPlan?.PlanId,
+                MaxUserSeats = freeTrialPlan?.MaxUserSeats ?? 5,
+                MaxLeadsQuota = freeTrialPlan?.MaxLeadsQuota ?? 1000,
+                TrialEndsAt = DateTime.UtcNow.AddDays(freeTrialPlan?.TrialDays ?? 14),
                 CurrentMonthAiUsageCount = 0,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
