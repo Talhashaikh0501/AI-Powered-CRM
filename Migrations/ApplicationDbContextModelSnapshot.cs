@@ -1256,10 +1256,14 @@ namespace AI_Powered_CRM.Migrations
             modelBuilder.Entity("AI_Powered_CRM.Models.Entities.Tenant", b =>
                 {
                     b.Navigation("Leads");
-
                     b.Navigation("Memberships");
-
                     b.Navigation("Settings");
+                    b.Navigation("SubscriptionPlan");
+                });
+
+            modelBuilder.Entity("AI_Powered_CRM.Models.Entities.SubscriptionPlan", b =>
+                {
+                    b.Navigation("Tenants");
                 });
 #pragma warning restore 612, 618
         }
