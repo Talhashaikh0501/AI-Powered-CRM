@@ -125,9 +125,11 @@ namespace AI_Powered_CRM.Controllers
             var activeMembership = await _context.TenantMemberships
                 .IgnoreQueryFilters()
                 .Include(m => m.Tenant)
-                .AnyAsync(m => m.UserId == user.Id && m.IsActive && m.Tenant != null && m.Tenant.IsActive);
+                .Where(m => m.UserId == user.Id && m.IsActive && m.Tenant != null && m.Tenant.IsActive)
+                .OrderByDescending(m => m.JoinedAt)
+                .FirstOrDefaultAsync();
 
-            if (!activeMembership)
+            if (activeMembership == null)
             {
                 await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginBlocked_NoActiveTenantMembership");
                 ModelState.AddModelError(string.Empty,
@@ -158,6 +160,16 @@ namespace AI_Powered_CRM.Controllers
                 // we also log the successful login for audit trail)
                 _logger.LogInformation("User {UserId} logged in successfully.", user.Id);
                 await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginSuccess");
+
+                // Persist the selected active workspace so tenant resolution and role claims
+                // use the same verified membership on the redirected request.
+                Response.Cookies.Append(TenantResolutionMiddleware.ActiveTenantCookieName, activeMembership.TenantId.ToString(), new CookieOptions
+                {
+                    HttpOnly = true,
+                    SameSite = SameSiteMode.Lax,
+                    Secure = Request.IsHttps,
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                });
 
                 if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                     return Redirect(returnUrl);
