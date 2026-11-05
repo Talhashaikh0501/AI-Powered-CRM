@@ -49,6 +49,7 @@ namespace AI_Powered_CRM.ViewModels
         public string? Phone { get; set; }
         public string DefaultCurrency { get; set; } = "INR";
         public SubscriptionTier Tier { get; set; }
+        public Guid? CurrentPlanId { get; set; }
         public SubscriptionStatus Status { get; set; }
         public DateTime? TrialEndsAt { get; set; }
         public DateTime? SubscriptionRenewsAt { get; set; }
