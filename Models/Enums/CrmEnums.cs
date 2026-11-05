@@ -77,7 +77,8 @@ namespace AI_Powered_CRM.Models.Enums
         FreeTrial,
         Starter,
         Professional,
-        Enterprise
+        Enterprise,
+        Custom
     }
 
     public enum SubscriptionStatus
