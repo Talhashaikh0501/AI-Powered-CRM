@@ -63,7 +63,7 @@ namespace AI_Powered_CRM.Migrations
                 principalColumn: "PlanId",
                 onDelete: ReferentialAction.SetNull);
 
-            migrationBuilder.Sql(@"
+            migrationBuilder.Sql("""
 INSERT INTO [TalhaCRM_SubscriptionPlans]
 ([PlanId],[Code],[Name],[Tagline],[MonthlyPriceInr],[YearlyPriceInr],[TrialDays],[MaxUserSeats],[MaxLeadsQuota],[MonthlyAiRequestLimit],[IsRecommended],[IsActive],[IsPublic],[SortOrder],[HighlightsJson],[IncludedFeaturesJson],[CreatedAt],[UpdatedAt])
 VALUES
@@ -84,7 +84,7 @@ JOIN [TalhaCRM_SubscriptionPlans] p ON p.Code =
     END;
 
 -- Existing tenant quota values are intentionally preserved during migration.
-");
+""");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
