@@ -413,7 +413,7 @@ namespace AI_Powered_CRM.Controllers
                     tenant.SubscriptionTier = selectedPlan.Code == "starter" ? SubscriptionTier.Starter
                         : selectedPlan.Code == "professional" ? SubscriptionTier.Professional
                         : selectedPlan.Code == "enterprise" ? SubscriptionTier.Enterprise
-                        : SubscriptionTier.FreeTrial;
+                        : SubscriptionTier.Custom;
                     if (selectedPlan.TrialDays > 0)
                         tenant.TrialEndsAt = DateTime.UtcNow.AddDays(selectedPlan.TrialDays);
                 }
