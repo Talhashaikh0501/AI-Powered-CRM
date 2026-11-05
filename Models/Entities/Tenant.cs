@@ -47,6 +47,10 @@ namespace AI_Powered_CRM.Models.Entities
 
         public int MonthlyAiRequestLimit { get; set; } = 200;
 
+        public Guid? SubscriptionPlanId { get; set; }
+
+        public virtual SubscriptionPlan? SubscriptionPlan { get; set; }
+
         public int CurrentMonthAiUsageCount { get; set; } = 0;
 
         public bool IsActive { get; set; } = true;
