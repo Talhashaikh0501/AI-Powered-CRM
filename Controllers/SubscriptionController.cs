@@ -61,6 +61,7 @@ namespace AI_Powered_CRM.Controllers
         {
             SubscriptionTier currentTier = SubscriptionTier.FreeTrial;
             SubscriptionStatus currentStatus = SubscriptionStatus.Trialing;
+            Guid? currentPlanId = null;
 
             if (_tenantContext.IsResolved)
             {
@@ -72,10 +73,11 @@ namespace AI_Powered_CRM.Controllers
                 {
                     currentTier = tenant.SubscriptionTier;
                     currentStatus = tenant.SubscriptionStatus;
+                    currentPlanId = tenant.SubscriptionPlanId;
                 }
             }
 
-            var plans = _billingService.GetAvailablePlans(currentTier);
+            var plans = _billingService.GetAvailablePlans(currentTier, currentPlanId);
 
             var vm = new PricingPageViewModel
             {
