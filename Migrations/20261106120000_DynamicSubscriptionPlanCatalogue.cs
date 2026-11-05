@@ -83,11 +83,7 @@ JOIN [TalhaCRM_SubscriptionPlans] p ON p.Code =
         ELSE 'free-trial'
     END;
 
-UPDATE t SET t.MaxUserSeats = p.MaxUserSeats,
-             t.MaxLeadsQuota = p.MaxLeadsQuota,
-             t.MonthlyAiRequestLimit = p.MonthlyAiRequestLimit
-FROM [TalhaCRM_Tenants] t
-JOIN [TalhaCRM_SubscriptionPlans] p ON p.PlanId = t.SubscriptionPlanId;
+-- Existing tenant quota values are intentionally preserved during migration.
 ");
         }
 
