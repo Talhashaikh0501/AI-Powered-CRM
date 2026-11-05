@@ -1,10 +1,14 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using AI_Powered_CRM.Data;
 
 #nullable disable
 
 namespace AI_Powered_CRM.Migrations
 {
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20261106120000_DynamicSubscriptionPlanCatalogue")]
     public partial class DynamicSubscriptionPlanCatalogue : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
