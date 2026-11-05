@@ -59,7 +59,7 @@
                                 <span class="text-muted small">/ month</span>
                             </div>
                             <div class="text-muted small mt-1 price-annual d-none">
-                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : "Free 14-day evaluation")
+                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : "Free @plan.TrialDays-day evaluation")
                             </div>
                             <div class="text-muted small mt-1 price-monthly">
                                 @(plan.MonthlyPriceInr > 0 ? "Billed on a monthly cycle" : "No credit card required")
