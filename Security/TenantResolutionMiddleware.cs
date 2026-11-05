@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AI_Powered_CRM.Data;
 using AI_Powered_CRM.Models.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +24,7 @@ namespace AI_Powered_CRM.Security
         public const string SupportReasonHeaderName = "X-Support-Reason";
         public const string SupportTicketHeaderName = "X-Support-Ticket";
         public const string ActiveTenantCookieName = "crm_active_tenant_id";
+        public const string PlatformWorkspaceCookieName = "crm_platform_workspace_access";
 
         public TenantResolutionMiddleware(RequestDelegate next, ILogger<TenantResolutionMiddleware> logger)
         {
@@ -30,7 +32,7 @@ namespace AI_Powered_CRM.Security
             _logger = logger;
         }
 
-        public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext, ApplicationDbContext dbContext)
+        public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext, ApplicationDbContext dbContext, IDataProtectionProvider dataProtectionProvider)
         {
             // 1. Unauthenticated requests: NEVER resolve tenant context
             if (context.User?.Identity?.IsAuthenticated != true)
@@ -68,7 +70,38 @@ namespace AI_Powered_CRM.Security
                 headerTenantId = parsedCookieTenantId;
             }
 
-            // 4. Handle Platform SuperAdmin: Require Server-Verified, Authorized, Audited Delegated Support Access
+            // A platform owner can explicitly enter a selected company from the Platform UI.
+            // The short-lived, Data-Protection-protected cookie cannot be forged by changing its contents.
+            string? ownerWorkspaceReason = null;
+            bool isOwnerWorkspaceSession = false;
+            if (isSuperAdmin && !isFromHeader &&
+                context.Request.Cookies.TryGetValue(PlatformWorkspaceCookieName, out var protectedWorkspace))
+            {
+                try
+                {
+                    var protector = dataProtectionProvider.CreateProtector("AI_Powered_CRM.PlatformWorkspaceAccess.v1");
+                    var parts = protector.Unprotect(protectedWorkspace).Split('|', 3);
+                    if (parts.Length == 3 &&
+                        Guid.TryParseExact(parts[0], "N", out var ownerTenantId) &&
+                        long.TryParse(parts[1], out var expiresUtcTicks) &&
+                        DateTime.UtcNow.Ticks <= expiresUtcTicks)
+                    {
+                        var reason = Uri.UnescapeDataString(parts[2]);
+                        if (!string.IsNullOrWhiteSpace(reason))
+                        {
+                            headerTenantId = ownerTenantId;
+                            ownerWorkspaceReason = reason;
+                            isOwnerWorkspaceSession = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Invalid or expired platform workspace access cookie for SuperAdmin {UserId}.", userId);
+                }
+            }
+
+            // 4. Handle Platform SuperAdmin: explicit owner workspace session or approved delegated support ticket
             if (isSuperAdmin)
             {
                 if (headerTenantId.HasValue)
@@ -83,33 +116,36 @@ namespace AI_Powered_CRM.Security
                         ticketRef = reasonVal.ToString().Trim();
                     }
 
-                    // Strict check: deliberate, server-verified support ticket is required
-                    if (string.IsNullOrWhiteSpace(ticketRef))
+                    SupportAccessTicket? authorizedTicket = null;
+                    if (!isOwnerWorkspaceSession)
                     {
-                        _logger.LogWarning("Security Block: Platform SuperAdmin {UserId} attempted delegated tenant access to {TenantId} without authorized ticket reference.", userId, headerTenantId.Value);
-                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        await WriteForbiddenOrErrorAsync(context, "Forbidden: Platform SuperAdmin delegated tenant access requires an approved server-side support ticket (X-Support-Ticket).");
-                        return;
-                    }
+                        // Delegated support continues to require a customer-approved server-side ticket.
+                        if (string.IsNullOrWhiteSpace(ticketRef))
+                        {
+                            _logger.LogWarning("Security Block: Platform SuperAdmin {UserId} attempted delegated tenant access to {TenantId} without authorized ticket reference.", userId, headerTenantId.Value);
+                            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                            await WriteForbiddenOrErrorAsync(context, "Forbidden: delegated support access requires an approved server-side support ticket.");
+                            return;
+                        }
 
-                    // Server-side verification of approved support ticket in database
-                    var now = DateTime.UtcNow;
-                    var authorizedTicket = await dbContext.SupportAccessTickets
-                        .IgnoreQueryFilters()
-                        .FirstOrDefaultAsync(t => 
-                            t.TenantId == headerTenantId.Value &&
-                            (t.TicketNumber == ticketRef || t.TicketId.ToString() == ticketRef) &&
-                            t.Status == "Approved" &&
-                            t.ExpiresAt >= now &&
-                            !string.IsNullOrWhiteSpace(t.SuperAdminUserId) &&
-                            t.SuperAdminUserId == userId);
+                        var now = DateTime.UtcNow;
+                        authorizedTicket = await dbContext.SupportAccessTickets
+                            .IgnoreQueryFilters()
+                            .FirstOrDefaultAsync(t =>
+                                t.TenantId == headerTenantId.Value &&
+                                (t.TicketNumber == ticketRef || t.TicketId.ToString() == ticketRef) &&
+                                t.Status == "Approved" &&
+                                t.ExpiresAt >= now &&
+                                !string.IsNullOrWhiteSpace(t.SuperAdminUserId) &&
+                                t.SuperAdminUserId == userId);
 
-                    if (authorizedTicket == null)
-                    {
-                        _logger.LogWarning("Security Alert: Platform SuperAdmin {UserId} attempted delegated access to {TenantId} with unapproved/expired ticket reference '{TicketRef}'.", userId, headerTenantId.Value, ticketRef);
-                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        await WriteForbiddenOrErrorAsync(context, "Forbidden: No active, server-approved support ticket found for this tenant and administrator.");
-                        return;
+                        if (authorizedTicket == null)
+                        {
+                            _logger.LogWarning("Security Alert: Platform SuperAdmin {UserId} attempted delegated access to {TenantId} with unapproved/expired ticket reference '{TicketRef}'.", userId, headerTenantId.Value, ticketRef);
+                            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                            await WriteForbiddenOrErrorAsync(context, "Forbidden: No active, server-approved support ticket found for this tenant and administrator.");
+                            return;
+                        }
                     }
 
                     var targetTenant = await dbContext.Tenants
@@ -125,7 +161,8 @@ namespace AI_Powered_CRM.Security
                     }
 
                     // Establish audited support session using verified reason from approved ticket
-                    tenantContext.SetDelegatedSupportSession(targetTenant.TenantId, targetTenant.Slug, authorizedTicket.Reason);
+                    var verifiedReason = isOwnerWorkspaceSession ? ownerWorkspaceReason! : authorizedTicket!.Reason;
+                    tenantContext.SetDelegatedSupportSession(targetTenant.TenantId, targetTenant.Slug, verifiedReason);
 
                     // Mandatory Permanent Audit Log (Fail Closed: request is aborted if audit cannot be persisted)
                     try
@@ -137,12 +174,13 @@ namespace AI_Powered_CRM.Security
                             UserId = userId,
                             EntityType = "Tenant",
                             EntityId = targetTenant.TenantId.ToString(),
-                            Action = "PlatformSuperAdminDelegatedAccess",
+                            Action = "PlatformSuperAdminWorkspaceAccess",
                             DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
                             {
-                                TicketId = authorizedTicket.TicketId,
-                                TicketNumber = authorizedTicket.TicketNumber,
-                                VerifiedReason = authorizedTicket.Reason,
+                                AccessMode = isOwnerWorkspaceSession ? "PlatformOwnerWorkspace" : "CustomerApprovedSupport",
+                                TicketId = authorizedTicket?.TicketId,
+                                TicketNumber = authorizedTicket?.TicketNumber,
+                                VerifiedReason = verifiedReason,
                                 TargetTenant = targetTenant.CompanyName,
                                 SuperAdminId = userId,
                                 ClientIp = context.Connection.RemoteIpAddress?.ToString()
