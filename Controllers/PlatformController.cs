@@ -154,7 +154,7 @@ namespace AI_Powered_CRM.Controllers
                     query = query.Where(t => t.IsActive == activeOnly.Value);
                 }
 
-                var allTenants = await _context.Tenants.AsNoTracking().ToListAsync();
+                var allTenants = await _context.Tenants.AsNoTracking().Include(t => t.SubscriptionPlan).ToListAsync();
                 var filteredTenants = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
 
                 var memberships = await _context.TenantMemberships
@@ -168,14 +168,10 @@ namespace AI_Powered_CRM.Controllers
 
                 var totalAiCalls = allTenants.Sum(t => t.CurrentMonthAiUsageCount);
 
-                // Estimated MRR based on active commercial tiers (Starter: ₹1,499, Pro: ₹3,999, Enterprise: ₹8,999)
-                decimal estimatedMrr = allTenants.Where(t => t.IsActive && t.SubscriptionStatus == SubscriptionStatus.Active).Sum(t => t.SubscriptionTier switch
-                {
-                    SubscriptionTier.Starter => 1499m,
-                    SubscriptionTier.Professional => 3999m,
-                    SubscriptionTier.Enterprise => 8999m,
-                    _ => 0m
-                });
+                // Estimate MRR from the current database-backed plan price.
+                decimal estimatedMrr = allTenants
+                    .Where(t => t.IsActive && t.SubscriptionStatus == SubscriptionStatus.Active)
+                    .Sum(t => t.SubscriptionPlan?.MonthlyPriceInr ?? 0m);
 
                 var tierDistribution = new Dictionary<SubscriptionTier, int>();
                 foreach (var tEnum in Enum.GetValues<SubscriptionTier>())
