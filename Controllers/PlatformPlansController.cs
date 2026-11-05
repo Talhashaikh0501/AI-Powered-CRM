@@ -115,12 +115,9 @@ namespace AI_Powered_CRM.Controllers
             var plan = await _db.SubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == model.PlanId.Value);
             if (plan == null) return NotFound();
 
-            var code = NormalizeCode(model.Code);
-            if (code != plan.Code && await _db.Tenants.AnyAsync(t => t.SubscriptionPlanId == plan.PlanId))
-            {
-                ModelState.AddModelError(nameof(model.Code), "The code cannot be changed while companies are assigned to this plan.");
-                return View(model);
-            }
+            // The internal plan code is immutable after creation; it is used to
+            // preserve legacy tier compatibility and tenant-to-plan mappings.
+            var code = plan.Code;
             if (await _db.SubscriptionPlans.AnyAsync(p => p.PlanId != plan.PlanId && p.Code == code))
             {
                 ModelState.AddModelError(nameof(model.Code), "This plan code already exists.");
