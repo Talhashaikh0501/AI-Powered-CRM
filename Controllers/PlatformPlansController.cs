@@ -171,7 +171,8 @@ namespace AI_Powered_CRM.Controllers
                 .FirstOrDefaultAsync(p => p.PlanId == id);
             if (plan == null) return NotFound();
 
-            if (plan.Tenants.Count > 0)
+            var wasAssigned = plan.Tenants.Count > 0;
+            if (wasAssigned)
             {
                 plan.IsActive = false;
                 plan.IsPublic = false;
@@ -185,7 +186,7 @@ namespace AI_Powered_CRM.Controllers
             }
 
             await _db.SaveChangesAsync();
-            await _auditService.LogAsync(GetUserId(), "SubscriptionPlan", id.ToString(), plan.IsActive ? "SubscriptionPlanArchivedInsteadOfDeleted" : "SubscriptionPlanDeleted", new { plan.Code, plan.Name }, true);
+            await _auditService.LogAsync(GetUserId(), "SubscriptionPlan", id.ToString(), wasAssigned ? "SubscriptionPlanArchivedInsteadOfDeleted" : "SubscriptionPlanDeleted", new { plan.Code, plan.Name }, true);
             return RedirectToAction(nameof(Index));
         }
 
