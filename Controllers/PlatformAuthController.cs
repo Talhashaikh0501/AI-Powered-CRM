@@ -81,6 +81,13 @@ namespace AI_Powered_CRM.Controllers
                 return View("~/Views/PlatformAuth/Login.cshtml", model);
             }
 
+            if (!user.EmailConfirmed)
+            {
+                await _auditService.LogAsync(user.Id, "PlatformAuth", user.Id, "PlatformLoginBlocked_UnconfirmedEmail");
+                ModelState.AddModelError(string.Empty, "The platform administrator email address must be verified before sign-in.");
+                return View("~/Views/PlatformAuth/Login.cshtml", model);
+            }
+
             var previousIgnore = _context.IgnoreTenantFilter;
             bool hasTenantMembership;
             try
