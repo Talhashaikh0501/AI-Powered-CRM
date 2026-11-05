@@ -30,8 +30,12 @@ namespace AI_Powered_CRM.Data
                 }
             }
 
-            // 2. Ensure Primary Default Tenant Exists (Config-driven)
+            // 2. Ensure the platform subscription catalogue exists before tenant provisioning.
+            await EnsureSubscriptionPlansAsync(context);
+
+            // 3. Ensure Primary Default Tenant Exists (Config-driven)
             var config = scope.ServiceProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+            var enterprisePlan = await context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Code == "enterprise" && p.IsActive);
             var defaultTenantId = Guid.TryParse(config?["PrimaryTenant:TenantId"], out var parsedId) 
                 ? parsedId 
                 : Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -53,6 +57,7 @@ namespace AI_Powered_CRM.Data
                     Phone = phone,
                     DefaultCurrency = currency,
                     SubscriptionTier = SubscriptionTier.Enterprise,
+                    SubscriptionPlanId = enterprisePlan?.PlanId,
                     SubscriptionStatus = SubscriptionStatus.Active,
                     MaxUserSeats = 100,
                     MaxLeadsQuota = 50000,
@@ -76,7 +81,13 @@ namespace AI_Powered_CRM.Data
                 await context.SaveChangesAsync();
             }
 
-            // 3. User Accounts Seeding
+            else if (defaultTenant.SubscriptionPlanId == null && enterprisePlan != null)
+            {
+                defaultTenant.SubscriptionPlanId = enterprisePlan.PlanId;
+                await context.SaveChangesAsync();
+            }
+
+            // 4. User Accounts Seeding
             ApplicationUser? adminUser = null;
             ApplicationUser? managerUser = null;
             ApplicationUser? salesUser   = null;
@@ -477,6 +488,26 @@ namespace AI_Powered_CRM.Data
 
                 await context.SaveChangesAsync();
             }
+        }
+
+        private static async Task EnsureSubscriptionPlansAsync(ApplicationDbContext context)
+        {
+            var defaults = new[]
+            {
+                new SubscriptionPlan { PlanId = Guid.Parse("10000000-0000-0000-0000-000000000001"), Code = "free-trial", Name = "Free Trial", Tagline = "14-day enterprise test drive with full AI access", MonthlyPriceInr = 0, YearlyPriceInr = 0, TrialDays = 14, MaxUserSeats = 5, MaxLeadsQuota = 1000, MonthlyAiRequestLimit = 200, SortOrder = 1, HighlightsJson = "[\"14-Day Free Access\",\"5 User Seats Included\",\"1,000 Leads Storage\",\"200 AI Scoring Credits\"]", IncludedFeaturesJson = "[\"5 Team Members\",\"1,000 Lead Records\",\"200 Groq AI Predictions / month\",\"Activity Logging & Notes\",\"Follow-up Task Reminders\",\"INR (₹) Default Currency\"]" },
+                new SubscriptionPlan { PlanId = Guid.Parse("10000000-0000-0000-0000-000000000002"), Code = "starter", Name = "Starter", Tagline = "Ideal for growing sales teams and agile startups", MonthlyPriceInr = 1499, YearlyPriceInr = 14390, MaxUserSeats = 10, MaxLeadsQuota = 5000, MonthlyAiRequestLimit = 1000, SortOrder = 2, HighlightsJson = "[\"Up to 10 Seats\",\"5,000 Leads Quota\",\"1,000 Monthly AI Predictions\",\"Standard Email Support\"]", IncludedFeaturesJson = "[\"10 Team Members\",\"5,000 Lead Records\",\"1,000 Groq AI Predictions / month\",\"Role Permissions (Admin, Manager, Rep)\",\"Conversion Pipeline Reports\",\"Automated Follow-up Queues\",\"Standard Email Support (24h SLA)\"]" },
+                new SubscriptionPlan { PlanId = Guid.Parse("10000000-0000-0000-0000-000000000003"), Code = "professional", Name = "Professional", Tagline = "High-velocity sales intelligence for scaling organizations", MonthlyPriceInr = 3999, YearlyPriceInr = 38390, MaxUserSeats = 25, MaxLeadsQuota = 25000, MonthlyAiRequestLimit = 5000, IsRecommended = true, SortOrder = 3, HighlightsJson = "[\"Up to 25 Seats\",\"25,000 Leads Quota\",\"5,000 Monthly AI Predictions\",\"Priority Audit Logging & Export Controls\",\"Priority Response Support\"]", IncludedFeaturesJson = "[\"25 Team Members\",\"25,000 Lead Records\",\"5,000 Groq AI Predictions / month\",\"Real-Time AI Lead Scoring & Win Probability\",\"Advanced Conversion Analytics & Trends\",\"Comprehensive Security Audit Logs\",\"Export Controls & Anti-Leakage\",\"Priority Email & Chat Support\"]" },
+                new SubscriptionPlan { PlanId = Guid.Parse("10000000-0000-0000-0000-000000000004"), Code = "enterprise", Name = "Enterprise", Tagline = "Maximum security, custom volume, and dedicated SLA for large teams", MonthlyPriceInr = 8999, YearlyPriceInr = 86390, MaxUserSeats = 100, MaxLeadsQuota = 100000, MonthlyAiRequestLimit = 25000, SortOrder = 4, HighlightsJson = "[\"100+ Custom Seats\",\"100,000+ Leads Quota\",\"25,000 Monthly AI Predictions\",\"Delegated Support Access Ticketing\",\"24/7 Dedicated SLA\"]", IncludedFeaturesJson = "[\"100+ Team Members\",\"100,000+ Lead Records\",\"25,000 Groq AI Predictions / month\",\"Anti-Self-Approval Delegated Support Access\",\"Immutable Audit Log Retention\",\"Custom Lead Assignment Rules\",\"Dedicated Account Manager\",\"24/7 Priority SLA & Escalation\"]" }
+            };
+
+            foreach (var plan in defaults)
+            {
+                if (!await context.SubscriptionPlans.AnyAsync(p => p.Code == plan.Code))
+                    context.SubscriptionPlans.Add(plan);
+            }
+
+            if (context.ChangeTracker.HasChanges())
+                await context.SaveChangesAsync();
         }
 
         private static async Task<ApplicationUser> EnsureUserAsync(
