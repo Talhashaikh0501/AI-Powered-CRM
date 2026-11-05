@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using AI_Powered_CRM.Data;
+using AI_Powered_CRM.Models;
 using AI_Powered_CRM.Models.Entities;
 using AI_Powered_CRM.Models.Enums;
 using AI_Powered_CRM.Services.Interfaces;
@@ -12,6 +13,7 @@ using AI_Powered_CRM.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -25,22 +27,104 @@ namespace AI_Powered_CRM.Controllers
         private readonly IAuditService _auditService;
         private readonly ILogger<PlatformController> _logger;
         private readonly IDataProtectionProvider _dataProtectionProvider;
+        private readonly ICompanyOnboardingService? _companyOnboardingService;
+        private readonly UserManager<ApplicationUser>? _userManager;
+        private readonly IEmailDeliveryService? _emailDeliveryService;
 
         public PlatformController(
             ApplicationDbContext context,
             ISupportAccessService supportAccessService,
             IAuditService auditService,
             ILogger<PlatformController> logger,
-            IDataProtectionProvider? dataProtectionProvider = null)
+            IDataProtectionProvider? dataProtectionProvider = null,
+            ICompanyOnboardingService? companyOnboardingService = null,
+            UserManager<ApplicationUser>? userManager = null,
+            IEmailDeliveryService? emailDeliveryService = null)
         {
             _context = context;
             _supportAccessService = supportAccessService;
             _auditService = auditService;
             _logger = logger;
             _dataProtectionProvider = dataProtectionProvider!;
+            _companyOnboardingService = companyOnboardingService;
+            _userManager = userManager;
+            _emailDeliveryService = emailDeliveryService;
         }
 
         private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "SuperAdmin";
+
+        // GET: /Platform/CreateCompany
+        [HttpGet]
+        public IActionResult CreateCompany()
+        {
+            return View(new RegisterCompanyViewModel());
+        }
+
+        // POST: /Platform/CreateCompany
+        // Uses the same transactional onboarding flow as public registration, but is
+        // available only to authenticated Platform SuperAdmins.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CreateCompany(RegisterCompanyViewModel model)
+        {
+            if (_companyOnboardingService == null || _userManager == null || _emailDeliveryService == null)
+                return StatusCode(500, "Company provisioning services are not available.");
+
+            if (!ModelState.IsValid)
+                return View(model);
+
+            var result = await _companyOnboardingService.RegisterCompanyAsync(model);
+            if (!result.Succeeded)
+            {
+                foreach (var error in result.Errors)
+                    ModelState.AddModelError(string.Empty, error);
+                return View(model);
+            }
+
+            var admin = result.UserId == null ? null : await _userManager.FindByIdAsync(result.UserId);
+            var emailSent = false;
+            if (admin != null)
+            {
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(admin);
+                var confirmationLink = Url.Action(
+                    "ConfirmEmail",
+                    "Account",
+                    new { userId = admin.Id, token },
+                    Request.Scheme);
+
+                if (!string.IsNullOrWhiteSpace(confirmationLink))
+                {
+                    emailSent = await _emailDeliveryService.SendEmailConfirmationAsync(
+                        admin.Email!,
+                        confirmationLink,
+                        admin.FullName ?? admin.Email!);
+                }
+            }
+
+            await _auditService.LogAsync(
+                GetUserId(),
+                "Tenant",
+                result.TenantId!.Value.ToString(),
+                "CompanyProvisionedByPlatformSuperAdmin",
+                new
+                {
+                    model.CompanyName,
+                    model.Slug,
+                    AdminEmail = model.ContactEmail,
+                    AdminUserId = result.UserId,
+                    EmailConfirmationSent = emailSent
+                });
+
+            _logger.LogInformation(
+                "Platform SuperAdmin {UserId} provisioned company {TenantId} ({CompanyName}); confirmation email sent: {EmailSent}.",
+                GetUserId(), result.TenantId, model.CompanyName, emailSent);
+
+            TempData["SuccessMessage"] = emailSent
+                ? $"Company '{model.CompanyName}' was created. The first administrator has been sent an email confirmation link."
+                : $"Company '{model.CompanyName}' was created, but the confirmation email could not be sent. Check email configuration and resend confirmation before the administrator signs in.";
+
+            return RedirectToAction(nameof(TenantDetails), new { id = result.TenantId });
+        }
 
         // GET: /Platform
         public async Task<IActionResult> Index(string? search, SubscriptionTier? tier, bool? activeOnly)
