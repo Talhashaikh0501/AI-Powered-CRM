@@ -50,6 +50,7 @@ namespace AI_Powered_CRM.ViewModels
         public SubscriptionTier Tier { get; set; }
         public SubscriptionStatus Status { get; set; }
         public DateTime? TrialEndsAt { get; set; }
+        public DateTime? SubscriptionRenewsAt { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
@@ -113,6 +114,10 @@ namespace AI_Powered_CRM.ViewModels
 
         [Range(0, 100000)]
         public int MonthlyAiRequestLimit { get; set; }
+
+        public DateTime? TrialEndsAt { get; set; }
+
+        public DateTime? SubscriptionRenewsAt { get; set; }
 
         public string? Reason { get; set; }
     }
