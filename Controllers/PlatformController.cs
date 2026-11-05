@@ -414,8 +414,9 @@ namespace AI_Powered_CRM.Controllers
                         : selectedPlan.Code == "professional" ? SubscriptionTier.Professional
                         : selectedPlan.Code == "enterprise" ? SubscriptionTier.Enterprise
                         : SubscriptionTier.Custom;
-                    if (selectedPlan.TrialDays > 0)
-                        tenant.TrialEndsAt = DateTime.UtcNow.AddDays(selectedPlan.TrialDays);
+                    tenant.TrialEndsAt = selectedPlan.TrialDays > 0
+                        ? DateTime.UtcNow.AddDays(selectedPlan.TrialDays)
+                        : null;
                 }
                 else
                 {
