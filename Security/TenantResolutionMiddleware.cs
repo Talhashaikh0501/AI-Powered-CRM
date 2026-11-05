@@ -163,6 +163,8 @@ namespace AI_Powered_CRM.Security
                     // Establish audited support session using verified reason from approved ticket
                     var verifiedReason = isOwnerWorkspaceSession ? ownerWorkspaceReason! : authorizedTicket!.Reason;
                     tenantContext.SetDelegatedSupportSession(targetTenant.TenantId, targetTenant.Slug, verifiedReason);
+                    // Platform owner workspace mode receives company-admin claims only for this verified tenant request.
+                    ApplyTenantRoleClaims(context.User, AI_Powered_CRM.Models.Enums.CompanyRole.CompanyAdmin);
 
                     // Mandatory Permanent Audit Log (Fail Closed: request is aborted if audit cannot be persisted)
                     try
