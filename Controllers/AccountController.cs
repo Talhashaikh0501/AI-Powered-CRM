@@ -57,7 +57,12 @@ namespace AI_Powered_CRM.Controllers
         public IActionResult Login(string? returnUrl = null)
         {
             if (User.Identity?.IsAuthenticated == true)
+            {
+                if (User.IsInRole("PlatformSuperAdmin") || User.IsInRole("SuperAdmin"))
+                    return RedirectToAction("Index", "Platform");
+
                 return RedirectToAction("Index", "Dashboard");
+            }
 
             ViewData["ReturnUrl"] = returnUrl;
             return View();
@@ -103,11 +108,36 @@ namespace AI_Powered_CRM.Controllers
                 return View(model);
             }
 
-            // Check email confirmation (PlatformSuperAdmin accounts bypass this check)
+            // Platform operators must use their dedicated authentication entry point.
+            // Never create a platform session through the tenant login form.
             var isPlatformSuperAdmin = await _userManager.IsInRoleAsync(user, "PlatformSuperAdmin") ||
                                        await _userManager.IsInRoleAsync(user, "SuperAdmin");
 
-            if (!user.EmailConfirmed && !isPlatformSuperAdmin)
+            if (isPlatformSuperAdmin)
+            {
+                await _auditService.LogAsync(user.Id, "Account", user.Id, "TenantLoginBlocked_PlatformAccount");
+                ModelState.AddModelError(string.Empty,
+                    "This is a Platform SuperAdmin account. Please use the dedicated Platform SuperAdmin sign-in page.");
+                return View(model);
+            }
+
+            // A tenant login is valid only when the user has an active membership in an active workspace.
+            var activeMembership = await _context.TenantMemberships
+                .IgnoreQueryFilters()
+                .Include(m => m.Tenant)
+                .Where(m => m.UserId == user.Id && m.IsActive && m.Tenant != null && m.Tenant.IsActive)
+                .OrderByDescending(m => m.JoinedAt)
+                .FirstOrDefaultAsync();
+
+            if (activeMembership == null)
+            {
+                await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginBlocked_NoActiveTenantMembership");
+                ModelState.AddModelError(string.Empty,
+                    "This account is not linked to an active workspace. Please contact your workspace administrator.");
+                return View(model);
+            }
+
+            if (!user.EmailConfirmed)
             {
                 _logger.LogWarning("Login attempt for unconfirmed account {UserId}.", user.Id);
                 await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginBlocked_UnconfirmedEmail");
@@ -131,13 +161,15 @@ namespace AI_Powered_CRM.Controllers
                 _logger.LogInformation("User {UserId} logged in successfully.", user.Id);
                 await _auditService.LogAsync(user.Id, "Account", user.Id, "LoginSuccess");
 
-                if (isPlatformSuperAdmin)
+                // Persist the selected active workspace so tenant resolution and role claims
+                // use the same verified membership on the redirected request.
+                Response.Cookies.Append(TenantResolutionMiddleware.ActiveTenantCookieName, activeMembership.TenantId.ToString(), new CookieOptions
                 {
-                    if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) && !returnUrl.StartsWith("/Dashboard"))
-                        return Redirect(returnUrl);
-
-                    return RedirectToAction("Index", "Platform");
-                }
+                    HttpOnly = true,
+                    SameSite = SameSiteMode.Lax,
+                    Secure = Request.IsHttps,
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                });
 
                 if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                     return Redirect(returnUrl);

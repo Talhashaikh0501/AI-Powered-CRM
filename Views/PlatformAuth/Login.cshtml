@@ -1,0 +1,66 @@
+@model AI_Powered_CRM.Controllers.LoginViewModel
+@{
+    ViewData["Title"] = "Platform SuperAdmin Sign In";
+    Layout = "_Layout";
+}
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light py-5 px-3">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden" style="max-width: 480px; width: 100%;">
+        <div class="p-4 p-sm-5 bg-white">
+            <div class="d-flex align-items-center gap-2 mb-4">
+                <div class="rounded-3 bg-dark p-2 text-white d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                    <i class="bi bi-shield-lock-fill fs-4"></i>
+                </div>
+                <div>
+                    <div class="fw-bold text-dark">NexusCRM</div>
+                    <div class="small text-muted">Platform Administration</div>
+                </div>
+            </div>
+
+            <h3 class="fw-bold text-dark mb-1">Platform SuperAdmin</h3>
+            <p class="text-muted small mb-4">This secure sign-in is exclusively for platform operators. Customer workspace accounts cannot sign in here.</p>
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger py-2 small" role="alert">
+                    @Html.ValidationSummary(false, "", new { @class = "mb-0" })
+                </div>
+            }
+
+            <form method="post" action="/Platform/Login">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label asp-for="Email" class="form-label small fw-semibold text-secondary">Platform email</label>
+                    <input asp-for="Email" class="form-control bg-light" type="email" autocomplete="username" placeholder="admin@yourdomain.com" required />
+                    <span asp-validation-for="Email" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Password" class="form-label small fw-semibold text-secondary">Password</label>
+                    <input asp-for="Password" class="form-control bg-light" type="password" autocomplete="current-password" placeholder="Enter your password" required />
+                    <span asp-validation-for="Password" class="text-danger small"></span>
+                </div>
+
+                <div class="form-check mb-4">
+                    <input asp-for="RememberMe" class="form-check-input" />
+                    <label asp-for="RememberMe" class="form-check-label small text-secondary">Keep me signed in</label>
+                </div>
+
+                <button type="submit" class="btn btn-dark w-100 py-2 fw-semibold">
+                    <i class="bi bi-shield-check me-1"></i> Secure platform sign in
+                </button>
+            </form>
+
+            <div class="text-center mt-4">
+                <a href="/Account/Login" class="text-decoration-none small text-muted">
+                    <i class="bi bi-arrow-left me-1"></i> Back to CRM user sign in
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
