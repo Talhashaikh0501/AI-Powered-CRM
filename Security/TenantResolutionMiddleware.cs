@@ -209,6 +209,7 @@ namespace AI_Powered_CRM.Security
                 }
                 else
                 {
+                    ApplyTenantRoleClaims(context.User, membership.CompanyRole);
                     tenantContext.SetTenant(membership.TenantId, membership.Tenant.Slug);
                 }
             }
@@ -254,6 +255,7 @@ namespace AI_Powered_CRM.Security
                     }
                     else
                     {
+                        ApplyTenantRoleClaims(context.User, activeMembership.CompanyRole);
                         tenantContext.SetTenant(activeMembership.TenantId, activeMembership.Tenant.Slug);
                     }
                 }
@@ -264,6 +266,32 @@ namespace AI_Powered_CRM.Security
             }
 
             await _next(context);
+        }
+
+        private static void ApplyTenantRoleClaims(ClaimsPrincipal principal, AI_Powered_CRM.Models.Enums.CompanyRole companyRole)
+        {
+            var identity = principal.Identities.FirstOrDefault(i => i.IsAuthenticated);
+            if (identity == null)
+                return;
+
+            // Tenant roles must come from the active membership, not from stale/global role claims.
+            var tenantRoleNames = new[] { "Admin", "CompanyAdmin", "Manager", "SalesExecutive" };
+            foreach (var claim in identity.FindAll(ClaimTypes.Role).Where(c => tenantRoleNames.Contains(c.Value)).ToList())
+                identity.RemoveClaim(claim);
+
+            switch (companyRole)
+            {
+                case AI_Powered_CRM.Models.Enums.CompanyRole.CompanyAdmin:
+                    identity.AddClaim(new Claim(ClaimTypes.Role, "Admin"));
+                    identity.AddClaim(new Claim(ClaimTypes.Role, "CompanyAdmin"));
+                    break;
+                case AI_Powered_CRM.Models.Enums.CompanyRole.Manager:
+                    identity.AddClaim(new Claim(ClaimTypes.Role, "Manager"));
+                    break;
+                case AI_Powered_CRM.Models.Enums.CompanyRole.SalesExecutive:
+                    identity.AddClaim(new Claim(ClaimTypes.Role, "SalesExecutive"));
+                    break;
+            }
         }
 
         private static async Task WriteForbiddenOrErrorAsync(HttpContext context, string message)
