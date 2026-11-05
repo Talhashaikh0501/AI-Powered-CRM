@@ -23,10 +23,10 @@ namespace AI_Powered_CRM.Services.Implementations
             _logger = logger;
         }
 
-        public List<SubscriptionPlanDto> GetAvailablePlans(SubscriptionTier? currentTier = null)
+        public List<SubscriptionPlanDto> GetAvailablePlans(SubscriptionTier? currentTier = null, Guid? currentPlanId = null)
         {
             return _db.SubscriptionPlans.AsNoTracking()
-                .Where(p => p.IsActive && p.IsPublic)
+                .Where(p => (p.IsActive && p.IsPublic) || (currentPlanId.HasValue && p.PlanId == currentPlanId.Value))
                 .OrderBy(p => p.SortOrder)
                 .ThenBy(p => p.Name)
                 .Select(p => new SubscriptionPlanDto
@@ -42,12 +42,12 @@ namespace AI_Powered_CRM.Services.Implementations
                     Tier = p.Code == "starter" ? SubscriptionTier.Starter
                         : p.Code == "professional" ? SubscriptionTier.Professional
                         : p.Code == "enterprise" ? SubscriptionTier.Enterprise
-                        : SubscriptionTier.FreeTrial,
+                        : p.Code == "free-trial" ? SubscriptionTier.FreeTrial : SubscriptionTier.Custom,
                     MaxUserSeats = p.MaxUserSeats,
                     MaxLeadsQuota = p.MaxLeadsQuota,
                     MonthlyAiRequestLimit = p.MonthlyAiRequestLimit,
                     IsRecommended = p.IsRecommended,
-                    IsCurrentPlan = currentTier.HasValue &&
+                    IsCurrentPlan = currentPlanId.HasValue ? p.PlanId == currentPlanId.Value : currentTier.HasValue &&
                         ((p.Code == "starter" && currentTier == SubscriptionTier.Starter) ||
                          (p.Code == "professional" && currentTier == SubscriptionTier.Professional) ||
                          (p.Code == "enterprise" && currentTier == SubscriptionTier.Enterprise) ||
@@ -86,7 +86,7 @@ namespace AI_Powered_CRM.Services.Implementations
                 daysLeftInTrial = Math.Max(0, diff);
             }
 
-            var plans = GetAvailablePlans(tenant.SubscriptionTier);
+            var plans = GetAvailablePlans(tenant.SubscriptionTier, tenant.SubscriptionPlanId);
 
             return new SubscriptionDashboardViewModel
             {
