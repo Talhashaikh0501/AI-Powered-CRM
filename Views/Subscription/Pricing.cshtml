@@ -59,7 +59,7 @@
                                 <span class="text-muted small">/ month</span>
                             </div>
                             <div class="text-muted small mt-1 price-annual d-none">
-                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : $"Free {plan.TrialDays}-day evaluation")
+                                @(plan.YearlyPriceInr > 0 ? $"Billed annually at ₹{plan.YearlyPriceInr:N0}/yr" : (plan.TrialDays > 0 ? $"Free {plan.TrialDays}-day evaluation" : "Free plan"))
                             </div>
                             <div class="text-muted small mt-1 price-monthly">
                                 @(plan.MonthlyPriceInr > 0 ? "Billed on a monthly cycle" : "No credit card required")
@@ -111,7 +111,7 @@
                             {
                                 <button type="button" class="btn @(isRec ? "btn-primary shadow-sm" : "btn-outline-primary") w-100 py-2 fw-semibold"
                                         data-bs-toggle="modal" data-bs-target="#paymentComingSoonModal">
-                                    @(plan.IsFree ? "Start Free Trial" : "Select " + plan.Name)
+                                    @(plan.TrialDays > 0 ? "Start Free Trial" : (plan.IsFree ? "Select Free Plan" : "Select " + plan.Name))
                                 </button>
                             }
                         </div>
