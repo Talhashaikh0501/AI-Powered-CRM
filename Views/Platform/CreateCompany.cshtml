@@ -1,0 +1,105 @@
+@model AI_Powered_CRM.ViewModels.RegisterCompanyViewModel
+@{
+    ViewData["Title"] = "Add New Company";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Add New Company</h3>
+        <p class="text-muted small mb-0">Provision a company workspace and its first Company Administrator.</p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Back to Company Directory
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="crm-card p-4">
+            <form asp-action="CreateCompany" method="post">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger small"></div>
+
+                <h5 class="fw-bold mb-3"><i class="bi bi-building me-2 text-primary"></i>Company information</h5>
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <label asp-for="CompanyName" class="form-label fw-semibold small"></label>
+                        <input asp-for="CompanyName" class="form-control" placeholder="Example Technologies Pvt. Ltd." />
+                        <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-5">
+                        <label asp-for="Slug" class="form-label fw-semibold small"></label>
+                        <input asp-for="Slug" class="form-control" placeholder="example-technologies" autocapitalize="off" />
+                        <span asp-validation-for="Slug" class="text-danger small"></span>
+                        <div class="form-text">Lowercase letters, numbers and hyphens only.</div>
+                    </div>
+                    <div class="col-md-7">
+                        <label asp-for="ContactEmail" class="form-label fw-semibold small"></label>
+                        <input asp-for="ContactEmail" type="email" class="form-control" placeholder="admin@company.com" />
+                        <span asp-validation-for="ContactEmail" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-5">
+                        <label asp-for="Phone" class="form-label fw-semibold small"></label>
+                        <input asp-for="Phone" class="form-control" placeholder="+91 ..." />
+                        <span asp-validation-for="Phone" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+                <h5 class="fw-bold mb-3"><i class="bi bi-person-badge me-2 text-primary"></i>First company administrator</h5>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label asp-for="AdminFullName" class="form-label fw-semibold small"></label>
+                        <input asp-for="AdminFullName" class="form-control" placeholder="Administrator's full name" />
+                        <span asp-validation-for="AdminFullName" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="Password" class="form-label fw-semibold small"></label>
+                        <input asp-for="Password" class="form-control" autocomplete="new-password" />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                        <div class="form-text">Use a temporary password and share it securely.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="ConfirmPassword" class="form-label fw-semibold small"></label>
+                        <input asp-for="ConfirmPassword" class="form-control" autocomplete="new-password" />
+                        <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info small mt-4 mb-3">
+                    <i class="bi bi-info-circle-fill me-1"></i>
+                    A 14-day Free Trial workspace is created with INR defaults and the standard starter quotas. The first administrator receives an email confirmation link before signing in.
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a asp-action="Index" class="btn btn-light">Cancel</a>
+                    <button type="submit" class="btn btn-success fw-semibold">
+                        <i class="bi bi-building-add me-1"></i> Create Company
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="crm-card p-4 h-100">
+            <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center mb-3" style="width:48px;height:48px;">
+                <i class="bi bi-shield-check fs-4"></i>
+            </div>
+            <h5 class="fw-bold">What gets provisioned?</h5>
+            <ul class="small text-muted ps-3 mb-0">
+                <li class="mb-2">A unique tenant and company URL slug.</li>
+                <li class="mb-2">Default company settings with INR currency.</li>
+                <li class="mb-2">A first administrator account with CompanyAdmin membership.</li>
+                <li class="mb-2">A 14-day Free Trial and default quotas.</li>
+                <li>Registration and platform audit entries.</li>
+            </ul>
+            <hr />
+            <p class="small text-muted mb-0">Company creation uses the existing onboarding transaction so the tenant, settings, user and membership are provisioned together.</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
